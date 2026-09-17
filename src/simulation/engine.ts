@@ -1,0 +1,179 @@
+import { findOption, pickEligibleCard } from './cards'
+import { evaluateStation, resolveOutcome, rollWeather } from './launch'
+import { generateHeadlines } from './press'
+import { applyDelta } from './resources'
+import type { GameAction, GameContent, GameState, Rng } from './types'
+
+const DEFAULT_RNG: Rng = Math.random
+
+/** Chance per sim-day that an eligible decision card is drawn. */
+const CARD_DRAW_CHANCE_PER_DAY = 0.35
+
+export function createInitialState(content: GameContent): GameState {
+  return {
+    day: 0,
+    speed: 'paused',
+    isHardPaused: false,
+    resources: { ...content.startingResources },
+    facility: { ...content.facility },
+    pendingMaterials: 0,
+    activeCards: [],
+    resolvedCardIds: [],
+    launch: null,
+    headlines: [],
+    milestone: { missionId: content.milestone.id, resolved: false, succeeded: null },
+  }
+}
+
+export function gameReducer(
+  state: GameState,
+  action: GameAction,
+  content: GameContent,
+  rng: Rng = DEFAULT_RNG,
+): GameState {
+  switch (action.type) {
+    case 'SET_SPEED': {
+      if (state.isHardPaused) return state
+      return { ...state, speed: action.speed }
+    }
+
+    case 'TICK': {
+      if (state.isHardPaused || state.speed === 'paused') return state
+      const day = state.day + 1
+      const pendingMaterials = Math.min(
+        state.facility.materialsStorageCap,
+        state.pendingMaterials + state.facility.materialsPerDay,
+      )
+
+      let activeCards = state.activeCards
+      if (rng() < CARD_DRAW_CHANCE_PER_DAY) {
+        const card = pickEligibleCard(
+          day,
+          content.cardPool,
+          activeCards.map((c) => c.cardId),
+          state.resolvedCardIds,
+          rng,
+        )
+        if (card) activeCards = [...activeCards, { cardId: card.id, drawnOnDay: day }]
+      }
+      const cardWasDrawn = activeCards !== state.activeCards
+
+      return {
+        ...state,
+        day,
+        pendingMaterials,
+        activeCards,
+        // MVP has no status-menu UI, so every card is severity 'pause' —
+        // a drawn card stops the flowing clock until the player resolves it.
+        speed: cardWasDrawn ? 'paused' : state.speed,
+      }
+    }
+
+    case 'COLLECT_MATERIALS': {
+      if (state.pendingMaterials <= 0) return state
+      return {
+        ...state,
+        resources: applyDelta(state.resources, { materials: state.pendingMaterials }),
+        pendingMaterials: 0,
+      }
+    }
+
+    case 'RESOLVE_CARD': {
+      const card = content.cardPool.find((c) => c.id === action.cardId)
+      if (!card) return state
+      const option = findOption(card, action.optionId)
+      return {
+        ...state,
+        resources: applyDelta(state.resources, option.effects),
+        activeCards: state.activeCards.filter((c) => c.cardId !== action.cardId),
+        resolvedCardIds: [...state.resolvedCardIds, action.cardId],
+      }
+    }
+
+    case 'START_LAUNCH': {
+      if (state.launch) return state
+      if (content.milestone.id !== action.missionId) return state
+      if (state.milestone.resolved) return state
+      return {
+        ...state,
+        isHardPaused: true,
+        speed: 'paused',
+        launch: {
+          missionId: content.milestone.id,
+          plan: content.milestone.plan,
+          stage: 'weather',
+          weather: null,
+          stations: [],
+          outcome: null,
+        },
+      }
+    }
+
+    case 'RUN_WEATHER_CHECK': {
+      if (!state.launch || state.launch.stage !== 'weather') return state
+      const weather = rollWeather(content.weatherProfile, rng)
+      return { ...state, launch: { ...state.launch, weather } }
+    }
+
+    case 'SCRUB_LAUNCH': {
+      if (!state.launch) return state
+      return { ...state, isHardPaused: false, launch: null }
+    }
+
+    case 'PROCEED_TO_GO_NO_GO': {
+      const launch = state.launch
+      if (!launch || launch.stage !== 'weather' || !launch.weather) return state
+      const weather = launch.weather
+      const stations = content.stations.map((def) => evaluateStation(def, state, launch.plan, weather, rng))
+      return { ...state, launch: { ...launch, stage: 'go-no-go', stations } }
+    }
+
+    case 'OVERRIDE_STATION': {
+      if (!state.launch || state.launch.stage !== 'go-no-go') return state
+      return {
+        ...state,
+        launch: {
+          ...state.launch,
+          stations: state.launch.stations.map((s) =>
+            s.stationId === action.stationId ? { ...s, overridden: true } : s,
+          ),
+        },
+      }
+    }
+
+    case 'COMMIT_LAUNCH': {
+      const launch = state.launch
+      if (!launch || launch.stage !== 'go-no-go' || !launch.weather) return state
+      const blocked = launch.stations.some((s) => !s.isGo && !s.overridden)
+      if (blocked) return state
+
+      const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, rng)
+      const mission = content.milestone
+      const effects = outcome === 'success' ? mission.successEffects : mission.failureEffects
+      const headlines = generateHeadlines(mission.id, mission.name, outcome, state.day)
+
+      return {
+        ...state,
+        resources: applyDelta(state.resources, effects),
+        headlines: [...state.headlines, ...headlines],
+        milestone:
+          state.milestone.missionId === mission.id
+            ? {
+                ...state.milestone,
+                resolved: outcome === 'success' ? true : state.milestone.resolved,
+                succeeded: outcome === 'success',
+              }
+            : state.milestone,
+        launch: { ...launch, stage: 'outcome', outcome },
+      }
+    }
+
+    case 'ACKNOWLEDGE_OUTCOME': {
+      if (!state.launch || state.launch.stage !== 'outcome') return state
+      return { ...state, isHardPaused: false, launch: null }
+    }
+
+    default:
+      return state
+  }
+}
