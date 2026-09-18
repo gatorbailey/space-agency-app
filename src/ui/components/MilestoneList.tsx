@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MILESTONES } from '../../content'
+import { MILESTONES, TECH_TREE } from '../../content'
 import { canAfford } from '../../simulation'
 import type { Astronaut, MilestoneMissionDef, ResourceDelta } from '../../simulation'
 import { useGame } from '../useGame'
@@ -30,7 +30,16 @@ function MilestoneCard({ mission }: { mission: MilestoneMissionDef }) {
   const prerequisite = mission.prerequisiteMissionId
     ? MILESTONES.find((m) => m.id === mission.prerequisiteMissionId)
     : undefined
-  const locked = !!prerequisite && !state.milestones[prerequisite.id]?.resolved
+  const requiredTech = mission.requiredTechId ? TECH_TREE.find((t) => t.id === mission.requiredTechId) : undefined
+
+  const unmetRequirements: string[] = []
+  if (prerequisite && !state.milestones[prerequisite.id]?.resolved) {
+    unmetRequirements.push(`${prerequisite.name} to succeed first`)
+  }
+  if (requiredTech && !state.unlockedTech.includes(requiredTech.id)) {
+    unmetRequirements.push(`${requiredTech.name} to be researched`)
+  }
+  const locked = unmetRequirements.length > 0
 
   if (progress?.resolved) {
     return (
@@ -45,7 +54,7 @@ function MilestoneCard({ mission }: { mission: MilestoneMissionDef }) {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 opacity-60">
         <h3 className="font-semibold text-slate-400">{mission.name} — Locked</h3>
-        <p className="mt-1 text-sm text-slate-600">Requires {prerequisite?.name} to succeed first.</p>
+        <p className="mt-1 text-sm text-slate-600">Requires {unmetRequirements.join(' and ')}.</p>
       </div>
     )
   }

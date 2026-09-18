@@ -140,6 +140,8 @@ export interface MilestoneMissionDef {
   failureEffects: ResourceDelta
   /** Must be resolved (succeeded) before this mission can be attempted. */
   prerequisiteMissionId?: string
+  /** An infrastructure-tech node that must be researched before this mission can be attempted. */
+  requiredTechId?: string
 }
 
 export interface MilestoneState {
@@ -152,8 +154,13 @@ export interface TechNodeDef {
   id: string
   name: string
   description: string
+  category: 'knowledge' | 'infrastructure'
   /** Deducted from resources on research — a negative delta. */
   cost: ResourceDelta
+  /** Another tech node that must already be researched, e.g. Exotic Propulsion requiring the R&D Lab tier. */
+  requiresTechId?: string
+  /** Applied alongside cost when researched — e.g. Exotic Propulsion's inherent Sentiment tax. */
+  bonusEffect?: ResourceDelta
 }
 
 export interface GameState {

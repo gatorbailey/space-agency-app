@@ -1,3 +1,4 @@
+import { TECH_IDS } from '../simulation'
 import type { MilestoneMissionDef } from '../simulation'
 
 /**
@@ -47,6 +48,7 @@ export const MILESTONES: MilestoneMissionDef[] = [
     successEffects: { sentiment: 20, budget: 8000 },
     failureEffects: { sentiment: -15, crewReadiness: -12 },
     prerequisiteMissionId: 'horizon-3',
+    requiredTechId: TECH_IDS.vabTier,
   },
   {
     id: 'horizon-5',
@@ -58,5 +60,6 @@ export const MILESTONES: MilestoneMissionDef[] = [
     successEffects: { sentiment: 35, budget: 15000 },
     failureEffects: { sentiment: -20, crewReadiness: -18 },
     prerequisiteMissionId: 'horizon-4',
+    requiredTechId: TECH_IDS.vabTier,
   },
 ]

@@ -4,7 +4,7 @@ import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
 import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
 import { hasTech, TECH_IDS } from './tech'
-import type { GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
+import type { FacilityState, GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
 
@@ -18,6 +18,12 @@ const SAFE_DEATH_CHANCE = 0.08
 /** Materials Science adds this many materials/day to the base facility rate. */
 const MATERIALS_SCIENCE_BONUS = 4
 
+/** R&D Lab Tier adds this many R&D/day to the base facility rate. */
+const RD_LAB_TIER_BONUS = 5
+
+/** Fueling Depot Tier adds this much to the materials storage cap. */
+const FUELING_DEPOT_STORAGE_BONUS = 20
+
 /** Life Support halves the crew-readiness penalty from a failed mission. */
 const LIFE_SUPPORT_FAILURE_MULTIPLIER = 0.5
 
@@ -25,6 +31,23 @@ const LIFE_SUPPORT_FAILURE_MULTIPLIER = 0.5
 function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): ResourceDelta {
   if (!hasTech(unlockedTech, TECH_IDS.lifeSupport) || effects.crewReadiness === undefined) return effects
   return { ...effects, crewReadiness: Math.round(effects.crewReadiness * LIFE_SUPPORT_FAILURE_MULTIPLIER) }
+}
+
+/** Facility upgrades some tech nodes grant, applied once at research time. */
+const FACILITY_BONUSES: Partial<Record<string, Partial<FacilityState>>> = {
+  [TECH_IDS.materialsScience]: { materialsPerDay: MATERIALS_SCIENCE_BONUS },
+  [TECH_IDS.fuelingDepotTier]: { materialsStorageCap: FUELING_DEPOT_STORAGE_BONUS },
+  [TECH_IDS.rdLabTier]: { rdPerDay: RD_LAB_TIER_BONUS },
+}
+
+function applyFacilityBonus(facility: FacilityState, techId: string): FacilityState {
+  const bonus = FACILITY_BONUSES[techId]
+  if (!bonus) return facility
+  const next = { ...facility }
+  for (const key of Object.keys(bonus) as (keyof FacilityState)[]) {
+    next[key] = facility[key] + (bonus[key] ?? 0)
+  }
+  return next
 }
 
 export function createInitialState(content: GameContent): GameState {
@@ -69,10 +92,10 @@ export function gameReducer(
     case 'TICK': {
       if (state.isHardPaused || state.speed === 'paused') return state
       const day = state.day + 1
-      const materialsPerDay =
-        state.facility.materialsPerDay +
-        (hasTech(state.unlockedTech, TECH_IDS.materialsScience) ? MATERIALS_SCIENCE_BONUS : 0)
-      const pendingMaterials = Math.min(state.facility.materialsStorageCap, state.pendingMaterials + materialsPerDay)
+      const pendingMaterials = Math.min(
+        state.facility.materialsStorageCap,
+        state.pendingMaterials + state.facility.materialsPerDay,
+      )
       const pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
 
       let activeCards = state.activeCards
@@ -125,10 +148,13 @@ export function gameReducer(
       const node = content.techTree.find((t) => t.id === action.techId)
       if (!node) return state
       if (state.unlockedTech.includes(node.id)) return state
+      if (node.requiresTechId && !state.unlockedTech.includes(node.requiresTechId)) return state
       if (!canAfford(state.resources, node.cost)) return state
+      const resources = applyDelta(applyDelta(state.resources, node.cost), node.bonusEffect ?? {})
       return {
         ...state,
-        resources: applyDelta(state.resources, node.cost),
+        resources,
+        facility: applyFacilityBonus(state.facility, node.id),
         unlockedTech: [...state.unlockedTech, node.id],
       }
     }
@@ -155,6 +181,7 @@ export function gameReducer(
         const prereq = state.milestones[mission.prerequisiteMissionId]
         if (!prereq || !prereq.resolved) return state
       }
+      if (mission.requiredTechId && !state.unlockedTech.includes(mission.requiredTechId)) return state
       const astronaut = findAstronaut(state.roster, action.astronautId)
       if (!astronaut || astronaut.status !== 'active') return state
       return {
@@ -192,7 +219,7 @@ export function gameReducer(
       if (!astronaut) return state
       const weather = launch.weather
       const stations = content.stations.map((def) =>
-        evaluateStation(def, state, launch.plan, weather, rng, astronaut),
+        evaluateStation(def, state, launch.plan, weather, rng, astronaut, state.unlockedTech),
       )
       return { ...state, launch: { ...launch, stage: 'go-no-go', stations } }
     }

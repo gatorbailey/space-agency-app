@@ -484,7 +484,7 @@ describe('tech tree', () => {
 
   it('RESEARCH_TECH unlocks a node and deducts its cost', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -20, budget: -500 } }],
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20, budget: -500 } }],
     })
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 25 } }
@@ -496,7 +496,7 @@ describe('tech tree', () => {
 
   it('RESEARCH_TECH is blocked when unaffordable, leaving state untouched', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -20 } }],
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20 } }],
     })
     const state = createInitialState(content) // rd starts at 0
     const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
@@ -506,7 +506,7 @@ describe('tech tree', () => {
 
   it('RESEARCH_TECH is a no-op once the node is already unlocked', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -5 } }],
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -5 } }],
     })
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 100 }, unlockedTech: ['test-tech'] }
@@ -514,13 +514,20 @@ describe('tech tree', () => {
     expect(next).toBe(state)
   })
 
-  it('Materials Science raises the daily materials accrual rate', () => {
-    const content = makeContent()
+  it('Materials Science raises the daily materials accrual rate once researched', () => {
+    const content = makeContent({
+      techTree: [
+        { id: TECH_IDS.materialsScience, name: 'Materials Science', description: '', category: 'knowledge', cost: {} },
+      ],
+    })
     let state = createInitialState(content)
-    state = { ...state, unlockedTech: [TECH_IDS.materialsScience] }
+    state = { ...state, resources: { ...state.resources, rd: 100, budget: 100000 } }
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.materialsScience }, content, alwaysGo)
+    expect(state.facility.materialsPerDay).toBe(9) // base 5/day + 4 bonus, applied once at research
+
     state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
     state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
-    expect(state.pendingMaterials).toBe(9) // base 5/day + 4 bonus
+    expect(state.pendingMaterials).toBe(9)
   })
 
   it('Life Support halves the crew-readiness penalty on a failed mission', () => {
@@ -617,5 +624,214 @@ describe('tech tree', () => {
     const deviationWithout = Math.abs(rollWeatherWith([]) - meanTemp)
     const deviationWith = Math.abs(rollWeatherWith([TECH_IDS.avionicsComputing]) - meanTemp)
     expect(deviationWith).toBeLessThan(deviationWithout)
+  })
+})
+
+describe('infrastructure tech tree', () => {
+  it('Fueling Depot Tier raises the materials storage cap once researched', () => {
+    const content = makeContent({
+      techTree: [
+        { id: TECH_IDS.fuelingDepotTier, name: 'Fueling Depot', description: '', category: 'infrastructure', cost: {} },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.fuelingDepotTier }, content, alwaysGo)
+    expect(state.facility.materialsStorageCap).toBe(40) // base 20 + 20 bonus
+  })
+
+  it('R&D Lab Tier raises the R&D generation rate once researched', () => {
+    const content = makeContent({
+      techTree: [{ id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} }],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.rdLabTier }, content, alwaysGo)
+    expect(state.facility.rdPerDay).toBe(7) // base 2 + 5 bonus
+  })
+
+  it('Exotic Propulsion is blocked until the R&D Lab tier is researched', () => {
+    const content = makeContent({
+      techTree: [
+        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} },
+        {
+          id: TECH_IDS.propulsionExotic,
+          name: 'Exotic',
+          description: '',
+          category: 'knowledge',
+          cost: {},
+          requiresTechId: TECH_IDS.rdLabTier,
+          bonusEffect: { sentiment: -8 },
+        },
+      ],
+    })
+    const state = createInitialState(content)
+    const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.propulsionExotic }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('Exotic Propulsion unlocks once the R&D Lab tier is researched, applying its Sentiment tax', () => {
+    const content = makeContent({
+      techTree: [
+        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} },
+        {
+          id: TECH_IDS.propulsionExotic,
+          name: 'Exotic',
+          description: '',
+          category: 'knowledge',
+          cost: {},
+          requiresTechId: TECH_IDS.rdLabTier,
+          bonusEffect: { sentiment: -8 },
+        },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.rdLabTier }, content, alwaysGo)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.propulsionExotic }, content, alwaysGo)
+    expect(state.unlockedTech).toContain(TECH_IDS.propulsionExotic)
+    expect(state.resources.sentiment).toBe(42) // 50 - 8
+  })
+
+  it('a mission with requiredTechId is blocked until that tech is researched', () => {
+    const content = makeContent({
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test',
+          description: '',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: {},
+          successEffects: {},
+          failureEffects: {},
+          requiredTechId: TECH_IDS.vabTier,
+        },
+      ],
+      techTree: [{ id: TECH_IDS.vabTier, name: 'VAB', description: '', category: 'infrastructure', cost: {} }],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch).toBeNull()
+
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.vabTier }, content, alwaysGo)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch?.missionId).toBe('test-milestone')
+  })
+
+  it('Pad Tier lowers the Propulsion station’s no-go odds', () => {
+    const content = makeContent({
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test',
+          description: '',
+          plan: { payloadType: 'research', riskThreshold: 100 },
+          cost: {},
+          successEffects: {},
+          failureEffects: {},
+        },
+      ],
+    })
+    const rng = () => 0.3
+
+    function propulsionIsGo(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rng,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
+      state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
+      return state.launch?.stations.find((s) => s.stationId === 'propulsion')?.isGo
+    }
+
+    expect(propulsionIsGo([])).toBe(false)
+    expect(propulsionIsGo([TECH_IDS.padTier])).toBe(true)
+  })
+
+  it('Mission Control Tier lowers no-go odds for Range Safety (and Flight Surgeon / Payload)', () => {
+    const content = makeContent({
+      stations: [{ id: 'range-safety', name: 'Range Safety', officer: 'Col. Test' }],
+    })
+    const rng = () => 0.13
+
+    function rangeSafetyIsGo(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rng,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
+      state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
+      return state.launch?.stations.find((s) => s.stationId === 'range-safety')?.isGo
+    }
+
+    expect(rangeSafetyIsGo([])).toBe(false)
+    expect(rangeSafetyIsGo([TECH_IDS.missionControlTier])).toBe(true)
+  })
+
+  it('Crawler/Transporter Tier lowers the safe weather threshold', () => {
+    const content = makeContent({
+      weatherProfile: { meanTempF: 36, stdDevTempF: 10, safeThresholdF: 40 },
+    })
+    const rng = () => 0.45
+
+    function checkWeather(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rng,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
+      return state.launch?.weather
+    }
+
+    const without = checkWeather([])
+    expect(without?.temperatureF).toBe(35)
+    expect(without?.isSafe).toBe(false)
+
+    const withCrawler = checkWeather([TECH_IDS.crawlerTier])
+    expect(withCrawler?.thresholdF).toBe(32)
+    expect(withCrawler?.isSafe).toBe(true)
+  })
+
+  it('Training Center Tier raises astronaut effective skills for evaluation', () => {
+    const content = makeContent({
+      stations: [{ id: 'flight-surgeon', name: 'Flight Surgeon', officer: 'Dr. Test' }],
+    })
+    const rng = () => 0.13
+
+    function flightSurgeonIsGo(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rng,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
+      state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
+      return state.launch?.stations.find((s) => s.stationId === 'flight-surgeon')?.isGo
+    }
+
+    expect(flightSurgeonIsGo([])).toBe(false)
+    expect(flightSurgeonIsGo([TECH_IDS.trainingCenterTier])).toBe(true)
   })
 })
