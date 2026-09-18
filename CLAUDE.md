@@ -25,6 +25,69 @@ and anything legally or politically sensitive.
     Phase 2.
   - **Platform Shell** — Capacitor wrapper for iOS distribution.
 
+## Implementation Status
+_Read this before proposing new work — it says what already exists so you
+don't have to re-derive it from git log. Update it at the end of each build
+stage._
+
+**Built** (MVP loop plus most of Phase 2 below), one stage at a time — see
+`git log --oneline` for the full sequence. Simulation Core lives in
+`src/simulation` (pure, zero UI deps, unit-tested), content in `src/content`,
+UI in `src/ui/components`, wired together in `src/App.tsx`:
+
+- Flowing clock (paused/normal/fast/faster), daily ticks, hard-pause only on
+  a launch's go/no-go window.
+- Full launch sequence — weather check → go/no-go stations (with per-station
+  reasoning and override) → outcome — for one site (Cape Canaveral).
+- Milestone chain: 5 Horizon missions, prerequisite- and tech-gated.
+- Decision cards: 28-card pool, `severity: flag|pause`, a `department` tag
+  (5 desks), optional deadline with auto-resolve-on-expiry.
+- Status menu: persistent badge, flagged items grouped by department,
+  drill-in to card detail.
+- Astronaut roster: capped active roster + reserve corps, promote/demote,
+  6 skills used live during launch resolution.
+- Both press outlets, generating headlines after every mission.
+- Knowledge tech tree (Propulsion Chemical/Exotic, Life Support, Materials
+  Science, Avionics/Computing) + Infrastructure tech tree (Pad, VAB, Fueling
+  Depot, Crawler, Mission Control, Training Center, R&D Lab tiers) — 11
+  nodes total. **Research takes real time**: cost is paid up front, then a
+  per-node day timer runs before it unlocks; the R&D Lab works one project
+  at a time.
+- Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
+  chance.
+- Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,
+  Provisions). Parts/Fuel passively accrue on-base (pending buffer +
+  collect); the other 3 are contractor-sourced via a rush-order Procurement
+  mechanic.
+- Appropriation cycle: Budget is granted automatically on a fixed cadence,
+  sized by current Sentiment — not just a flat drip.
+- Budget Office panel: appropriation countdown/formula/last-grant, plus an
+  Ops Budget section — ongoing spend sliders (R&D Overtime, Crew Training,
+  Public Affairs) converting Budget into R&D/Crew Readiness/Sentiment, each
+  with a one-time "Surge" purchase alongside its ongoing dial.
+- Local-only saves (`src/save/localStorage.ts`), versioned via
+  `SAVE_VERSION` — bump it whenever `GameState`'s shape changes.
+- iOS shell via Capacitor, with safe-area handling.
+
+**Not yet built** (still real backlog — see Phase 2/3 below for full
+detail):
+- Intel resource; the Technical/Operations Labor split.
+- A second site — everything is still hardcoded to one (Cape Canaveral).
+- Site security (trespassers/environmentalists/spies/saboteurs).
+- Cloud sync for saves.
+- Rival program(s), contractors with loyalty, administrations, alt-history
+  forks, partnership missions (Phase 3).
+- The graphic site map with building-grouped alerts, a message-center/
+  command-center alternate view, and multiple concurrent view modes —
+  explicitly scoped out of every build stage so far as future work.
+- The full fueling-window hold-clock tension in the launch sequence — still
+  simplified to weather check → go/no-go → outcome, not the staged 6-step
+  sequence with a countdown-style fueling window described below.
+
+As of the last update here: 69 tests passing, `npm run build` /
+`npm run lint` / `npx cap sync ios` all clean, history fully pushed to
+`origin/main`.
+
 ## Time Model
 Originally scoped as discrete daily turns; **now settled on a continuous
 flowing clock** (SimCity-style, not Civilization-style) with adjustable
@@ -247,6 +310,9 @@ non-core bonuses (e.g. a one-time Sentiment nudge or an early
 intelligence peek), thematically framed as intel briefings.
 
 ## MVP Scope (build this first, nothing more)
+_Complete — see Implementation Status above. Kept as-written below for
+historical reference; several "not yet" items here (astronaut roster, tech
+tree, status-menu UI) have since shipped as Phase 2 work._
 - **One site** (Cape Canaveral is the presumed default).
 - **Trimmed resource loop:** Sentiment + Budget + Materials only.
   No Intel, no Labor split — use a generic "crew readiness" stat.
@@ -262,6 +328,9 @@ intelligence peek), thematically framed as intel briefings.
   security threats, no status-menu UI yet.
 
 ## Phase 2
+_Partially complete — see Implementation Status above for exactly what's
+shipped vs. still open._
+
 Full resource web (Intel, Technical/Operations Labor split), named
 astronaut roster (active/reserve), knowledge tech tree, base/center
 infrastructure tiers, site security, VIP tours, status-menu UI
