@@ -1,3 +1,4 @@
+import { hasTech, TECH_IDS } from './tech'
 import type {
   Astronaut,
   GameState,
@@ -9,10 +10,19 @@ import type {
   WeatherCheck,
 } from './types'
 
-export function rollWeather(profile: SiteWeatherProfile, rng: Rng): WeatherCheck {
+/** Avionics/Computing narrows the weather forecast's error band. */
+const AVIONICS_NOISE_MULTIPLIER = 0.5
+
+/** Propulsion (Chemical) softens how much a cut-corner risk setting hurts the odds. */
+const PROPULSION_RISK_MULTIPLIER = 0.6
+
+export function rollWeather(profile: SiteWeatherProfile, rng: Rng, unlockedTech: string[]): WeatherCheck {
   // Sum of three uniforms approximates a bell curve without extra deps.
   const noise = (rng() + rng() + rng() - 1.5) / 1.5
-  const temperatureF = Math.round(profile.meanTempF + noise * profile.stdDevTempF)
+  const stdDev = hasTech(unlockedTech, TECH_IDS.avionicsComputing)
+    ? profile.stdDevTempF * AVIONICS_NOISE_MULTIPLIER
+    : profile.stdDevTempF
+  const temperatureF = Math.round(profile.meanTempF + noise * stdDev)
   return {
     temperatureF,
     thresholdF: profile.safeThresholdF,
@@ -101,13 +111,17 @@ export function resolveOutcome(
   stations: GoNoGoStatus[],
   plan: LaunchPlan,
   astronaut: Astronaut,
+  unlockedTech: string[],
   rng: Rng,
 ): 'success' | 'failure' {
   let failureChance = 0.05
   if (!weather.isSafe) failureChance += 0.35
   const overriddenNoGos = stations.filter((s) => !s.isGo && s.overridden)
   failureChance += overriddenNoGos.length * 0.2
-  failureChance += (plan.riskThreshold / 100) * 0.15
+  const riskContribution = (plan.riskThreshold / 100) * 0.15
+  failureChance += hasTech(unlockedTech, TECH_IDS.propulsionChemical)
+    ? riskContribution * PROPULSION_RISK_MULTIPLIER
+    : riskContribution
   // A skilled, experienced commander shaves a little off the odds.
   failureChance -= ((astronaut.skills.command - 50) / 1000) * 2
   failureChance = Math.min(0.9, Math.max(0.02, failureChance))

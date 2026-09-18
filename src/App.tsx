@@ -8,6 +8,7 @@ import { LaunchSequenceModal } from './ui/components/LaunchSequenceModal'
 import { MilestoneList } from './ui/components/MilestoneList'
 import { ResourceBar } from './ui/components/ResourceBar'
 import { StatusMenu } from './ui/components/StatusMenu'
+import { TechTree } from './ui/components/TechTree'
 import { GameProvider } from './ui/GameContext'
 import { useGame } from './ui/useGame'
 
@@ -44,6 +45,7 @@ function AppShell() {
 
       <main className="flex flex-1 flex-col gap-4 px-4 py-4">
         <MilestoneList />
+        <TechTree />
         <AstronautRoster />
       </main>
 

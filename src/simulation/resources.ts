@@ -5,6 +5,7 @@ const BOUNDS: Record<keyof ResourceState, [number, number]> = {
   budget: [0, Number.POSITIVE_INFINITY],
   materials: [0, Number.POSITIVE_INFINITY],
   crewReadiness: [0, 100],
+  rd: [0, Number.POSITIVE_INFINITY],
 }
 
 export function clampResource(key: keyof ResourceState, value: number): number {

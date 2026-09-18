@@ -15,6 +15,8 @@ export interface ResourceState {
   budget: number
   materials: number
   crewReadiness: number
+  /** Spent on the knowledge tech tree. */
+  rd: number
 }
 
 export type ResourceDelta = Partial<ResourceState>
@@ -23,6 +25,8 @@ export interface FacilityState {
   materialsPerDay: number
   /** Storage cap on the *uncollected* buffer — the daily-engagement hook. */
   materialsStorageCap: number
+  rdPerDay: number
+  rdStorageCap: number
 }
 
 export interface DecisionOption {
@@ -144,6 +148,14 @@ export interface MilestoneState {
   succeeded: boolean | null
 }
 
+export interface TechNodeDef {
+  id: string
+  name: string
+  description: string
+  /** Deducted from resources on research — a negative delta. */
+  cost: ResourceDelta
+}
+
 export interface GameState {
   day: number
   speed: ClockSpeed
@@ -153,6 +165,10 @@ export interface GameState {
   facility: FacilityState
   /** Materials accrued passively but not yet collected into `resources.materials`. */
   pendingMaterials: number
+  /** R&D accrued passively but not yet collected into `resources.rd`. */
+  pendingRD: number
+  /** Ids of researched knowledge-tech nodes. */
+  unlockedTech: string[]
   activeCards: ActiveCard[]
   /** Maps card id to the sim day it was last resolved, for cooldown-based redraws. */
   resolvedCards: Record<string, number>
@@ -167,6 +183,8 @@ export type GameAction =
   | { type: 'SET_SPEED'; speed: ClockSpeed }
   | { type: 'TICK' }
   | { type: 'COLLECT_MATERIALS' }
+  | { type: 'COLLECT_RD' }
+  | { type: 'RESEARCH_TECH'; techId: string }
   | { type: 'RESOLVE_CARD'; cardId: string; optionId: string }
   | { type: 'START_LAUNCH'; missionId: string; astronautId: string }
   | { type: 'RUN_WEATHER_CHECK' }
@@ -198,6 +216,7 @@ export interface GameContent {
   weatherProfile: SiteWeatherProfile
   /** Ordered chain of missions; a mission with a prerequisiteMissionId unlocks after it. */
   milestones: MilestoneMissionDef[]
+  techTree: TechNodeDef[]
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]

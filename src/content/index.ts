@@ -4,12 +4,14 @@ import { CARD_POOL } from './cards'
 import { MILESTONES } from './milestones'
 import { FACILITY, WEATHER_PROFILE } from './site'
 import { GO_NO_GO_STATIONS } from './stations'
+import { TECH_TREE } from './techTree'
 
 export const STARTING_RESOURCES: ResourceState = {
   sentiment: 50,
   budget: 12000,
   materials: 20,
   crewReadiness: 70,
+  rd: 0,
 }
 
 export const GAME_CONTENT: GameContent = {
@@ -17,6 +19,7 @@ export const GAME_CONTENT: GameContent = {
   stations: GO_NO_GO_STATIONS,
   weatherProfile: WEATHER_PROFILE,
   milestones: MILESTONES,
+  techTree: TECH_TREE,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
   astronautPool: ASTRONAUT_POOL,
@@ -24,5 +27,5 @@ export const GAME_CONTENT: GameContent = {
   activeRosterCap: ACTIVE_ROSTER_CAP,
 }
 
-export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONES, WEATHER_PROFILE }
+export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONES, TECH_TREE, WEATHER_PROFILE }
 export { SITE_NAME } from './site'

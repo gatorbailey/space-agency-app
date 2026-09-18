@@ -3,7 +3,8 @@ import { evaluateStation, resolveOutcome, rollWeather, wasAvoidableRisk } from '
 import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
 import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
-import type { GameAction, GameContent, GameState, Rng, Severity } from './types'
+import { hasTech, TECH_IDS } from './tech'
+import type { GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
 
@@ -14,6 +15,18 @@ const CARD_DRAW_CHANCE_PER_DAY = 0.35
 const RISKY_DEATH_CHANCE = 0.35
 const SAFE_DEATH_CHANCE = 0.08
 
+/** Materials Science adds this many materials/day to the base facility rate. */
+const MATERIALS_SCIENCE_BONUS = 4
+
+/** Life Support halves the crew-readiness penalty from a failed mission. */
+const LIFE_SUPPORT_FAILURE_MULTIPLIER = 0.5
+
+/** Life Support halves the crew-readiness cost of a failed mission. */
+function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): ResourceDelta {
+  if (!hasTech(unlockedTech, TECH_IDS.lifeSupport) || effects.crewReadiness === undefined) return effects
+  return { ...effects, crewReadiness: Math.round(effects.crewReadiness * LIFE_SUPPORT_FAILURE_MULTIPLIER) }
+}
+
 export function createInitialState(content: GameContent): GameState {
   return {
     day: 0,
@@ -22,6 +35,8 @@ export function createInitialState(content: GameContent): GameState {
     resources: { ...content.startingResources },
     facility: { ...content.facility },
     pendingMaterials: 0,
+    pendingRD: 0,
+    unlockedTech: [],
     activeCards: [],
     resolvedCards: {},
     launch: null,
@@ -54,10 +69,11 @@ export function gameReducer(
     case 'TICK': {
       if (state.isHardPaused || state.speed === 'paused') return state
       const day = state.day + 1
-      const pendingMaterials = Math.min(
-        state.facility.materialsStorageCap,
-        state.pendingMaterials + state.facility.materialsPerDay,
-      )
+      const materialsPerDay =
+        state.facility.materialsPerDay +
+        (hasTech(state.unlockedTech, TECH_IDS.materialsScience) ? MATERIALS_SCIENCE_BONUS : 0)
+      const pendingMaterials = Math.min(state.facility.materialsStorageCap, state.pendingMaterials + materialsPerDay)
+      const pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
 
       let activeCards = state.activeCards
       let drawnCardSeverity: Severity | null = null
@@ -79,6 +95,7 @@ export function gameReducer(
         ...state,
         day,
         pendingMaterials,
+        pendingRD,
         activeCards,
         // 'flag' cards queue in the status menu without interrupting the
         // clock; only a 'pause' card (rare/urgent) stops time outright.
@@ -92,6 +109,27 @@ export function gameReducer(
         ...state,
         resources: applyDelta(state.resources, { materials: state.pendingMaterials }),
         pendingMaterials: 0,
+      }
+    }
+
+    case 'COLLECT_RD': {
+      if (state.pendingRD <= 0) return state
+      return {
+        ...state,
+        resources: applyDelta(state.resources, { rd: state.pendingRD }),
+        pendingRD: 0,
+      }
+    }
+
+    case 'RESEARCH_TECH': {
+      const node = content.techTree.find((t) => t.id === action.techId)
+      if (!node) return state
+      if (state.unlockedTech.includes(node.id)) return state
+      if (!canAfford(state.resources, node.cost)) return state
+      return {
+        ...state,
+        resources: applyDelta(state.resources, node.cost),
+        unlockedTech: [...state.unlockedTech, node.id],
       }
     }
 
@@ -138,7 +176,7 @@ export function gameReducer(
 
     case 'RUN_WEATHER_CHECK': {
       if (!state.launch || state.launch.stage !== 'weather') return state
-      const weather = rollWeather(content.weatherProfile, rng)
+      const weather = rollWeather(content.weatherProfile, rng, state.unlockedTech)
       return { ...state, launch: { ...state.launch, weather } }
     }
 
@@ -183,8 +221,11 @@ export function gameReducer(
       const astronaut = findAstronaut(state.roster, launch.astronautId)
       if (!astronaut) return state
 
-      const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, astronaut, rng)
-      const effects = outcome === 'success' ? mission.successEffects : mission.failureEffects
+      const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, astronaut, state.unlockedTech, rng)
+      const effects =
+        outcome === 'success'
+          ? mission.successEffects
+          : softenFailureEffects(mission.failureEffects, state.unlockedTech)
       const resources = applyDelta(applyDelta(state.resources, mission.cost), effects)
 
       let roster = state.roster

@@ -12,4 +12,6 @@ export const WEATHER_PROFILE: SiteWeatherProfile = {
 export const FACILITY: FacilityState = {
   materialsPerDay: 8,
   materialsStorageCap: 40,
+  rdPerDay: 3,
+  rdStorageCap: 20,
 }

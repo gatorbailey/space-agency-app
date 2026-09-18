@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, gameReducer } from './engine'
+import { TECH_IDS } from './tech'
 import type { AstronautDef, DecisionCardDef, GameContent } from './types'
 
 const neutralSkills = { piloting: 50, engineering: 50, eva: 50, science: 50, command: 50, public: 50 }
@@ -51,8 +52,9 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
         failureEffects: { sentiment: -10 },
       },
     ],
-    facility: { materialsPerDay: 5, materialsStorageCap: 20 },
-    startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70 },
+    techTree: [],
+    facility: { materialsPerDay: 5, materialsStorageCap: 20, rdPerDay: 2, rdStorageCap: 10 },
+    startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70, rd: 0 },
     astronautPool: [testAstronaut, reserveAstronaut],
     initialActiveIds: ['test-astronaut'],
     activeRosterCap: 1,
@@ -265,7 +267,7 @@ describe('launch cost', () => {
 
   it('blocks COMMIT_LAUNCH when the mission cost cannot be afforded, leaving resources untouched', () => {
     const content = makeContent({
-      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70 },
+      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70, rd: 0 },
       milestones: [
         {
           id: 'test-milestone',
@@ -456,5 +458,164 @@ describe('milestone chain', () => {
       alwaysGo,
     )
     expect(state.launch).toBeNull()
+  })
+})
+
+describe('tech tree', () => {
+  it('accrues R&D into a pending buffer capped by facility storage', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 10; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.pendingRD).toBe(10) // rdPerDay 2 * 10 days, capped at rdStorageCap 10
+    expect(state.resources.rd).toBe(0)
+  })
+
+  it('COLLECT_RD moves the pending buffer into resources', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = { ...state, pendingRD: 7 }
+    state = gameReducer(state, { type: 'COLLECT_RD' }, content, alwaysGo)
+    expect(state.resources.rd).toBe(7)
+    expect(state.pendingRD).toBe(0)
+  })
+
+  it('RESEARCH_TECH unlocks a node and deducts its cost', () => {
+    const content = makeContent({
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -20, budget: -500 } }],
+    })
+    let state = createInitialState(content)
+    state = { ...state, resources: { ...state.resources, rd: 25 } }
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
+    expect(state.unlockedTech).toContain('test-tech')
+    expect(state.resources.rd).toBe(5)
+    expect(state.resources.budget).toBe(500) // 1000 - 500
+  })
+
+  it('RESEARCH_TECH is blocked when unaffordable, leaving state untouched', () => {
+    const content = makeContent({
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -20 } }],
+    })
+    const state = createInitialState(content) // rd starts at 0
+    const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
+    expect(next).toBe(state)
+    expect(next.unlockedTech).not.toContain('test-tech')
+  })
+
+  it('RESEARCH_TECH is a no-op once the node is already unlocked', () => {
+    const content = makeContent({
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', cost: { rd: -5 } }],
+    })
+    let state = createInitialState(content)
+    state = { ...state, resources: { ...state.resources, rd: 100 }, unlockedTech: ['test-tech'] }
+    const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('Materials Science raises the daily materials accrual rate', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = { ...state, unlockedTech: [TECH_IDS.materialsScience] }
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.pendingMaterials).toBe(9) // base 5/day + 4 bonus
+  })
+
+  it('Life Support halves the crew-readiness penalty on a failed mission', () => {
+    const content = makeContent({
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test Milestone',
+          description: 'A test milestone',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: {},
+          successEffects: { sentiment: 10 },
+          failureEffects: { crewReadiness: -10 },
+        },
+      ],
+    })
+    let state = createInitialState(content)
+    state = { ...state, unlockedTech: [TECH_IDS.lifeSupport] }
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+      content,
+      alwaysFail,
+    )
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+    for (const station of state.launch!.stations) {
+      if (!station.isGo) {
+        state = gameReducer(state, { type: 'OVERRIDE_STATION', stationId: station.stationId }, content, alwaysFail)
+      }
+    }
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysFail)
+    expect(state.launch?.outcome).toBe('failure')
+    expect(state.resources.crewReadiness).toBe(65) // 70 - 5 (halved from -10)
+  })
+
+  it('Propulsion (Chemical) softens the risk-threshold contribution enough to flip a close outcome', () => {
+    const content = makeContent({
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test Milestone',
+          description: 'A test milestone',
+          plan: { payloadType: 'research', riskThreshold: 100 },
+          cost: {},
+          successEffects: { sentiment: 10 },
+          failureEffects: { sentiment: -10 },
+        },
+      ],
+    })
+    const rng = () => 0.37
+
+    function runToOutcome(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rng,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
+      state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
+      for (const station of state.launch!.stations) {
+        if (!station.isGo) {
+          state = gameReducer(state, { type: 'OVERRIDE_STATION', stationId: station.stationId }, content, rng)
+        }
+      }
+      return gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, rng)
+    }
+
+    expect(runToOutcome([]).launch?.outcome).toBe('failure')
+    expect(runToOutcome([TECH_IDS.propulsionChemical]).launch?.outcome).toBe('success')
+  })
+
+  it('Avionics/Computing narrows the weather forecast’s swing from the mean', () => {
+    const content = makeContent()
+    const rngHigh = () => 0.99
+
+    function rollWeatherWith(unlockedTech: string[]) {
+      let state = createInitialState(content)
+      state = { ...state, unlockedTech }
+      state = gameReducer(
+        state,
+        { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+        content,
+        rngHigh,
+      )
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rngHigh)
+      return state.launch?.weather?.temperatureF ?? 0
+    }
+
+    const meanTemp = content.weatherProfile.meanTempF
+    const deviationWithout = Math.abs(rollWeatherWith([]) - meanTemp)
+    const deviationWith = Math.abs(rollWeatherWith([TECH_IDS.avionicsComputing]) - meanTemp)
+    expect(deviationWith).toBeLessThan(deviationWithout)
   })
 })
