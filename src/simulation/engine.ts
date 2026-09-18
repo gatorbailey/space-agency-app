@@ -1,7 +1,7 @@
 import { findOption, pickEligibleCard } from './cards'
 import { evaluateStation, resolveOutcome, rollWeather } from './launch'
 import { generateHeadlines } from './press'
-import { applyDelta } from './resources'
+import { applyDelta, canAfford } from './resources'
 import type { GameAction, GameContent, GameState, Rng } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
@@ -18,7 +18,7 @@ export function createInitialState(content: GameContent): GameState {
     facility: { ...content.facility },
     pendingMaterials: 0,
     activeCards: [],
-    resolvedCardIds: [],
+    resolvedCards: {},
     launch: null,
     headlines: [],
     milestone: { missionId: content.milestone.id, resolved: false, succeeded: null },
@@ -51,7 +51,7 @@ export function gameReducer(
           day,
           content.cardPool,
           activeCards.map((c) => c.cardId),
-          state.resolvedCardIds,
+          state.resolvedCards,
           rng,
         )
         if (card) activeCards = [...activeCards, { cardId: card.id, drawnOnDay: day }]
@@ -86,7 +86,7 @@ export function gameReducer(
         ...state,
         resources: applyDelta(state.resources, option.effects),
         activeCards: state.activeCards.filter((c) => c.cardId !== action.cardId),
-        resolvedCardIds: [...state.resolvedCardIds, action.cardId],
+        resolvedCards: { ...state.resolvedCards, [action.cardId]: state.day },
       }
     }
 
@@ -146,15 +146,17 @@ export function gameReducer(
       if (!launch || launch.stage !== 'go-no-go' || !launch.weather) return state
       const blocked = launch.stations.some((s) => !s.isGo && !s.overridden)
       if (blocked) return state
+      const mission = content.milestone
+      if (!canAfford(state.resources, mission.cost)) return state
 
       const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, rng)
-      const mission = content.milestone
       const effects = outcome === 'success' ? mission.successEffects : mission.failureEffects
       const headlines = generateHeadlines(mission.id, mission.name, outcome, state.day)
+      const resources = applyDelta(applyDelta(state.resources, mission.cost), effects)
 
       return {
         ...state,
-        resources: applyDelta(state.resources, effects),
+        resources,
         headlines: [...state.headlines, ...headlines],
         milestone:
           state.milestone.missionId === mission.id

@@ -1,7 +1,7 @@
 import type { GameState } from '../simulation'
 
 const SAVE_KEY = 'space-agency:save'
-const SAVE_VERSION = 1
+const SAVE_VERSION = 2
 
 interface SaveEnvelope {
   version: number

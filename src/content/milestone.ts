@@ -14,6 +14,7 @@ export const MILESTONE: MilestoneMissionDef = {
     payloadType: 'research',
     riskThreshold: 35,
   },
+  cost: { budget: -4000, materials: -30 },
   successEffects: { sentiment: 15, budget: 5000 },
   failureEffects: { sentiment: -10, crewReadiness: -10 },
 }

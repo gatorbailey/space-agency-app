@@ -4,15 +4,16 @@ export function pickEligibleCard(
   day: number,
   cardPool: DecisionCardDef[],
   activeCardIds: string[],
-  resolvedCardIds: string[],
+  resolvedCards: Record<string, number>,
   rng: () => number,
 ): DecisionCardDef | null {
-  const eligible = cardPool.filter(
-    (card) =>
-      card.availableFromDay <= day &&
-      !activeCardIds.includes(card.id) &&
-      !resolvedCardIds.includes(card.id),
-  )
+  const eligible = cardPool.filter((card) => {
+    if (card.availableFromDay > day) return false
+    if (activeCardIds.includes(card.id)) return false
+    const lastResolvedDay = resolvedCards[card.id]
+    if (lastResolvedDay === undefined) return true
+    return day - lastResolvedDay >= card.cooldownDays
+  })
   if (eligible.length === 0) return null
   return eligible[Math.floor(rng() * eligible.length)]
 }

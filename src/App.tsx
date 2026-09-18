@@ -9,7 +9,7 @@ import { GameProvider } from './ui/GameContext'
 function App() {
   return (
     <GameProvider>
-      <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen flex-col bg-slate-950 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-slate-100">
         <header>
           <h1 className="px-4 pt-4 text-xl font-bold tracking-tight">Space Agency</h1>
           <ResourceBar />

@@ -1,10 +1,14 @@
-import { GO_NO_GO_STATIONS } from '../../content'
+import { GO_NO_GO_STATIONS, MILESTONE } from '../../content'
+import { canAfford } from '../../simulation'
 import { useGame } from '../useGame'
 
 export function LaunchSequenceModal() {
   const { state, dispatch } = useGame()
   const launch = state.launch
   if (!launch) return null
+
+  const blockedByStations = launch.stations.some((s) => !s.isGo && !s.overridden)
+  const affordable = canAfford(state.resources, MILESTONE.cost)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
@@ -90,10 +94,16 @@ export function LaunchSequenceModal() {
               })}
             </ul>
 
+            {!affordable && (
+              <p className="mt-3 text-xs text-amber-400">
+                Not enough budget/materials to cover the launch cost — scrub and collect more first.
+              </p>
+            )}
+
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                disabled={launch.stations.some((s) => !s.isGo && !s.overridden)}
+                disabled={blockedByStations || !affordable}
                 onClick={() => dispatch({ type: 'COMMIT_LAUNCH' })}
                 className="rounded bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
               >

@@ -38,6 +38,8 @@ export interface DecisionCardDef {
   severity: Severity
   /** Earliest sim day this card is eligible to be drawn. */
   availableFromDay: number
+  /** Minimum sim-days after resolution before this card can be drawn again. */
+  cooldownDays: number
   options: DecisionOption[]
 }
 
@@ -96,6 +98,8 @@ export interface MilestoneMissionDef {
   name: string
   description: string
   plan: LaunchPlan
+  /** Deducted from resources on commit — a negative delta, same shape as card effects. */
+  cost: ResourceDelta
   /** Applied on top of the computed launch outcome. */
   successEffects: ResourceDelta
   failureEffects: ResourceDelta
@@ -117,7 +121,8 @@ export interface GameState {
   /** Materials accrued passively but not yet collected into `resources.materials`. */
   pendingMaterials: number
   activeCards: ActiveCard[]
-  resolvedCardIds: string[]
+  /** Maps card id to the sim day it was last resolved, for cooldown-based redraws. */
+  resolvedCards: Record<string, number>
   launch: LaunchSequenceState | null
   headlines: Headline[]
   milestone: MilestoneState

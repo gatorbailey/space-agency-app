@@ -1,5 +1,13 @@
 import { MILESTONE } from '../../content'
+import { canAfford } from '../../simulation'
 import { useGame } from '../useGame'
+
+function formatCost(cost: typeof MILESTONE.cost): string {
+  const parts: string[] = []
+  if (cost.budget) parts.push(`$${Math.abs(cost.budget).toLocaleString()} budget`)
+  if (cost.materials) parts.push(`${Math.abs(cost.materials)} materials`)
+  return parts.join(', ')
+}
 
 export function MilestonePanel() {
   const { state, dispatch } = useGame()
@@ -14,10 +22,16 @@ export function MilestonePanel() {
     )
   }
 
+  const affordable = canAfford(state.resources, MILESTONE.cost)
+
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
       <h3 className="font-semibold text-slate-100">{MILESTONE.name}</h3>
       <p className="mt-1 text-sm text-slate-400">{MILESTONE.description}</p>
+      <p className="mt-2 text-xs text-slate-500">Launch cost: {formatCost(MILESTONE.cost)}</p>
+      {!affordable && (
+        <p className="mt-1 text-xs text-amber-400">Not enough budget/materials yet — collect and hold more.</p>
+      )}
       {milestone.succeeded === false && (
         <p className="mt-2 text-xs text-rose-400">Last attempt failed — the program can try again.</p>
       )}

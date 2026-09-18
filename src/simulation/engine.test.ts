@@ -11,6 +11,7 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
         description: 'A test card',
         severity: 'pause',
         availableFromDay: 0,
+        cooldownDays: 5,
         options: [
           { id: 'a', label: 'A', description: '', effects: { sentiment: 5 } },
           { id: 'b', label: 'B', description: '', effects: { budget: -100 } },
@@ -27,6 +28,7 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
       name: 'Test Milestone',
       description: 'A test milestone',
       plan: { payloadType: 'research', riskThreshold: 20 },
+      cost: {},
       successEffects: { sentiment: 10 },
       failureEffects: { sentiment: -10 },
     },
@@ -104,7 +106,25 @@ describe('decision cards', () => {
     state = gameReducer(state, { type: 'RESOLVE_CARD', cardId: 'test-card', optionId: 'a' }, content, alwaysGo)
     expect(state.resources.sentiment).toBe(55)
     expect(state.activeCards).toHaveLength(0)
-    expect(state.resolvedCardIds).toContain('test-card')
+    expect(state.resolvedCards['test-card']).toBe(0)
+  })
+
+  it('does not redraw a resolved card until its cooldown elapses', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = { ...state, resolvedCards: { 'test-card': 0 } }
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+
+    // Days 1-4: still within the 5-day cooldown, so no draw even with a low rng.
+    for (let i = 0; i < 4; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
+    }
+    expect(state.activeCards).toHaveLength(0)
+
+    // Day 5: cooldown has elapsed, so the card is eligible again.
+    state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
+    expect(state.activeCards).toHaveLength(1)
+    expect(state.activeCards[0].cardId).toBe('test-card')
   })
 })
 
@@ -175,5 +195,52 @@ describe('launch sequence', () => {
     expect(state.launch).toBeNull()
     expect(state.isHardPaused).toBe(false)
     expect(state.resources).toEqual(startingResources)
+  })
+})
+
+describe('launch cost', () => {
+  it('deducts the mission cost from resources on a successful commit', () => {
+    const content = makeContent({
+      milestone: {
+        id: 'test-milestone',
+        name: 'Test Milestone',
+        description: 'A test milestone',
+        plan: { payloadType: 'research', riskThreshold: 20 },
+        cost: { budget: -500, materials: -5 },
+        successEffects: { sentiment: 10 },
+        failureEffects: { sentiment: -10 },
+      },
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    expect(state.resources.budget).toBe(500) // 1000 - 500
+    expect(state.resources.materials).toBe(5) // 10 - 5
+  })
+
+  it('blocks COMMIT_LAUNCH when the mission cost cannot be afforded, leaving resources untouched', () => {
+    const content = makeContent({
+      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70 },
+      milestone: {
+        id: 'test-milestone',
+        name: 'Test Milestone',
+        description: 'A test milestone',
+        plan: { payloadType: 'research', riskThreshold: 20 },
+        cost: { budget: -500 },
+        successEffects: { sentiment: 10 },
+        failureEffects: { sentiment: -10 },
+      },
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
+
+    const beforeCommit = state
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    expect(state).toBe(beforeCommit) // unchanged, commit was blocked on affordability
+    expect(state.launch?.stage).toBe('go-no-go')
   })
 })

@@ -21,3 +21,11 @@ export function applyDelta(resources: ResourceState, delta: ResourceDelta): Reso
   }
   return next
 }
+
+/** True if applying `cost` (a negative delta, e.g. { budget: -4000 }) wouldn't need to go below 0. */
+export function canAfford(resources: ResourceState, cost: ResourceDelta): boolean {
+  return (Object.keys(cost) as (keyof ResourceState)[]).every((key) => {
+    const change = cost[key]
+    return change === undefined || resources[key] + change >= 0
+  })
+}
