@@ -1,13 +1,18 @@
 import { findOption, pickEligibleCard } from './cards'
-import { evaluateStation, resolveOutcome, rollWeather } from './launch'
+import { evaluateStation, resolveOutcome, rollWeather, wasAvoidableRisk } from './launch'
 import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
+import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
 import type { GameAction, GameContent, GameState, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
 
 /** Chance per sim-day that an eligible decision card is drawn. */
 const CARD_DRAW_CHANCE_PER_DAY = 0.35
+
+/** Chance a failed launch costs the assigned astronaut their life. */
+const RISKY_DEATH_CHANCE = 0.35
+const SAFE_DEATH_CHANCE = 0.08
 
 export function createInitialState(content: GameContent): GameState {
   return {
@@ -22,6 +27,13 @@ export function createInitialState(content: GameContent): GameState {
     launch: null,
     headlines: [],
     milestone: { missionId: content.milestone.id, resolved: false, succeeded: null },
+    roster: {
+      activeCap: content.activeRosterCap,
+      astronauts: content.astronautPool.map((def) => ({
+        ...def,
+        status: content.initialActiveIds.includes(def.id) ? 'active' : 'reserve',
+      })),
+    },
   }
 }
 
@@ -97,6 +109,8 @@ export function gameReducer(
       if (state.launch) return state
       if (content.milestone.id !== action.missionId) return state
       if (state.milestone.resolved) return state
+      const astronaut = findAstronaut(state.roster, action.astronautId)
+      if (!astronaut || astronaut.status !== 'active') return state
       return {
         ...state,
         isHardPaused: true,
@@ -104,10 +118,12 @@ export function gameReducer(
         launch: {
           missionId: content.milestone.id,
           plan: content.milestone.plan,
+          astronautId: astronaut.id,
           stage: 'weather',
           weather: null,
           stations: [],
           outcome: null,
+          astronautLost: false,
         },
       }
     }
@@ -126,8 +142,12 @@ export function gameReducer(
     case 'PROCEED_TO_GO_NO_GO': {
       const launch = state.launch
       if (!launch || launch.stage !== 'weather' || !launch.weather) return state
+      const astronaut = findAstronaut(state.roster, launch.astronautId)
+      if (!astronaut) return state
       const weather = launch.weather
-      const stations = content.stations.map((def) => evaluateStation(def, state, launch.plan, weather, rng))
+      const stations = content.stations.map((def) =>
+        evaluateStation(def, state, launch.plan, weather, rng, astronaut),
+      )
       return { ...state, launch: { ...launch, stage: 'go-no-go', stations } }
     }
 
@@ -151,15 +171,37 @@ export function gameReducer(
       if (blocked) return state
       const mission = content.milestone
       if (!canAfford(state.resources, mission.cost)) return state
+      const astronaut = findAstronaut(state.roster, launch.astronautId)
+      if (!astronaut) return state
 
-      const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, rng)
+      const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, astronaut, rng)
       const effects = outcome === 'success' ? mission.successEffects : mission.failureEffects
-      const headlines = generateHeadlines(mission.id, mission.name, outcome, state.day, state.headlines.length)
       const resources = applyDelta(applyDelta(state.resources, mission.cost), effects)
+
+      let roster = state.roster
+      let astronautLost = false
+      if (outcome === 'failure') {
+        const riskyLaunch = wasAvoidableRisk(launch.weather, launch.stations)
+        const deathChance = riskyLaunch ? RISKY_DEATH_CHANCE : SAFE_DEATH_CHANCE
+        if (rng() < deathChance) {
+          astronautLost = true
+          roster = markDeceased(state.roster, astronaut.id)
+        }
+      }
+
+      const headlines = generateHeadlines(
+        mission.id,
+        mission.name,
+        outcome,
+        state.day,
+        state.headlines.length,
+        astronautLost ? astronaut.lastName : null,
+      )
 
       return {
         ...state,
         resources,
+        roster,
         headlines: [...state.headlines, ...headlines],
         milestone:
           state.milestone.missionId === mission.id
@@ -169,13 +211,21 @@ export function gameReducer(
                 succeeded: outcome === 'success',
               }
             : state.milestone,
-        launch: { ...launch, stage: 'outcome', outcome },
+        launch: { ...launch, stage: 'outcome', outcome, astronautLost },
       }
     }
 
     case 'ACKNOWLEDGE_OUTCOME': {
       if (!state.launch || state.launch.stage !== 'outcome') return state
       return { ...state, isHardPaused: false, launch: null }
+    }
+
+    case 'PROMOTE_ASTRONAUT': {
+      return { ...state, roster: promoteAstronaut(state.roster, action.astronautId) }
+    }
+
+    case 'DEMOTE_ASTRONAUT': {
+      return { ...state, roster: demoteAstronaut(state.roster, action.astronautId) }
     }
 
     default:

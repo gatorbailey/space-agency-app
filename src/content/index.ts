@@ -1,4 +1,5 @@
 import type { GameContent, ResourceState } from '../simulation'
+import { ACTIVE_ROSTER_CAP, ASTRONAUT_POOL, INITIAL_ACTIVE_ASTRONAUT_IDS } from './astronauts'
 import { CARD_POOL } from './cards'
 import { MILESTONE } from './milestone'
 import { FACILITY, WEATHER_PROFILE } from './site'
@@ -18,7 +19,10 @@ export const GAME_CONTENT: GameContent = {
   milestone: MILESTONE,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
+  astronautPool: ASTRONAUT_POOL,
+  initialActiveIds: INITIAL_ACTIVE_ASTRONAUT_IDS,
+  activeRosterCap: ACTIVE_ROSTER_CAP,
 }
 
-export { CARD_POOL, GO_NO_GO_STATIONS, MILESTONE, WEATHER_PROFILE }
+export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONE, WEATHER_PROFILE }
 export { SITE_NAME } from './site'

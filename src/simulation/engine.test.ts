@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, gameReducer } from './engine'
-import type { DecisionCardDef, GameContent } from './types'
+import type { AstronautDef, DecisionCardDef, GameContent } from './types'
+
+const neutralSkills = { piloting: 50, engineering: 50, eva: 50, science: 50, command: 50, public: 50 }
+
+const testAstronaut: AstronautDef = { id: 'test-astronaut', lastName: 'Test', skills: neutralSkills }
+const reserveAstronaut: AstronautDef = { id: 'reserve-astronaut', lastName: 'Reserve', skills: neutralSkills }
 
 const testCard: DecisionCardDef = {
   id: 'test-card',
@@ -46,6 +51,9 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
     },
     facility: { materialsPerDay: 5, materialsStorageCap: 20 },
     startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70 },
+    astronautPool: [testAstronaut, reserveAstronaut],
+    initialActiveIds: ['test-astronaut'],
+    activeRosterCap: 1,
     ...overrides,
   }
 }
@@ -163,7 +171,7 @@ describe('launch sequence', () => {
   it('runs weather -> go-no-go -> outcome and hard-pauses the clock throughout', () => {
     const content = makeContent()
     let state = createInitialState(content)
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
     expect(state.isHardPaused).toBe(true)
     expect(state.launch?.stage).toBe('weather')
 
@@ -189,7 +197,7 @@ describe('launch sequence', () => {
   it('blocks COMMIT_LAUNCH when a station is no-go and not overridden', () => {
     const content = makeContent()
     let state = createInitialState(content)
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
     expect(state.launch?.stations.some((s) => !s.isGo)).toBe(true)
@@ -203,7 +211,7 @@ describe('launch sequence', () => {
   it('allows COMMIT_LAUNCH once every no-go station is overridden', () => {
     const content = makeContent()
     let state = createInitialState(content)
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
 
@@ -221,7 +229,7 @@ describe('launch sequence', () => {
     const content = makeContent()
     let state = createInitialState(content)
     const startingResources = state.resources
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
     state = gameReducer(state, { type: 'SCRUB_LAUNCH' }, content, alwaysGo)
     expect(state.launch).toBeNull()
     expect(state.isHardPaused).toBe(false)
@@ -243,7 +251,7 @@ describe('launch cost', () => {
       },
     })
     let state = createInitialState(content)
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
@@ -265,7 +273,7 @@ describe('launch cost', () => {
       },
     })
     let state = createInitialState(content)
-    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
 
@@ -273,5 +281,88 @@ describe('launch cost', () => {
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
     expect(state).toBe(beforeCommit) // unchanged, commit was blocked on affordability
     expect(state.launch?.stage).toBe('go-no-go')
+  })
+})
+
+describe('astronaut roster', () => {
+  it('splits the pool into active and reserve per content, respecting the active cap', () => {
+    const content = makeContent()
+    const state = createInitialState(content)
+    expect(state.roster.astronauts.find((a) => a.id === 'test-astronaut')?.status).toBe('active')
+    expect(state.roster.astronauts.find((a) => a.id === 'reserve-astronaut')?.status).toBe('reserve')
+    expect(state.roster.activeCap).toBe(1)
+  })
+
+  it('PROMOTE_ASTRONAUT moves a reserve astronaut to active when under cap', () => {
+    const content = makeContent({ activeRosterCap: 2 })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'PROMOTE_ASTRONAUT', astronautId: 'reserve-astronaut' }, content, alwaysGo)
+    expect(state.roster.astronauts.find((a) => a.id === 'reserve-astronaut')?.status).toBe('active')
+  })
+
+  it('PROMOTE_ASTRONAUT is a no-op once the active cap is full', () => {
+    const content = makeContent() // activeRosterCap: 1, already filled by test-astronaut
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'PROMOTE_ASTRONAUT', astronautId: 'reserve-astronaut' }, content, alwaysGo)
+    expect(state.roster.astronauts.find((a) => a.id === 'reserve-astronaut')?.status).toBe('reserve')
+  })
+
+  it('DEMOTE_ASTRONAUT moves an active astronaut back to reserve', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'DEMOTE_ASTRONAUT', astronautId: 'test-astronaut' }, content, alwaysGo)
+    expect(state.roster.astronauts.find((a) => a.id === 'test-astronaut')?.status).toBe('reserve')
+  })
+
+  it('START_LAUNCH refuses an astronaut who is not on active duty', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'reserve-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch).toBeNull()
+  })
+
+  it('a risky failure (overridden no-go) can cost the assigned astronaut their life', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+      content,
+      alwaysFail,
+    )
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+    for (const station of state.launch!.stations) {
+      if (!station.isGo) {
+        state = gameReducer(state, { type: 'OVERRIDE_STATION', stationId: station.stationId }, content, alwaysFail)
+      }
+    }
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysFail)
+    expect(state.launch?.outcome).toBe('failure')
+    expect(state.launch?.astronautLost).toBe(true)
+    expect(state.roster.astronauts.find((a) => a.id === 'test-astronaut')?.status).toBe('deceased')
+    expect(state.headlines.some((h) => h.text.includes('Test'))).toBe(true)
+  })
+
+  it('a clean success never touches the astronaut roster', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    expect(state.launch?.outcome).toBe('success')
+    expect(state.launch?.astronautLost).toBe(false)
+    expect(state.roster.astronauts.find((a) => a.id === 'test-astronaut')?.status).toBe('active')
   })
 })

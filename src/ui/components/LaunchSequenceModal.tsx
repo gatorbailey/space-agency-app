@@ -9,11 +9,13 @@ export function LaunchSequenceModal() {
 
   const blockedByStations = launch.stations.some((s) => !s.isGo && !s.overridden)
   const affordable = canAfford(state.resources, MILESTONE.cost)
+  const crew = state.roster.astronauts.find((a) => a.id === launch.astronautId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         <h2 className="text-lg font-bold text-slate-100">Launch Sequence</h2>
+        <p className="mt-0.5 text-xs text-slate-500">Crew: {crew?.lastName ?? 'Unassigned'}</p>
         <StageIndicator stage={launch.stage} />
 
         {launch.stage === 'weather' && (
@@ -127,6 +129,11 @@ export function LaunchSequenceModal() {
             >
               {launch.outcome === 'success' ? 'LAUNCH SUCCESS' : 'MISSION FAILURE'}
             </p>
+            {launch.astronautLost && (
+              <p className="mt-2 text-sm font-semibold text-rose-300">
+                {crew?.lastName ?? 'The crew member'} was lost in the line of duty.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => dispatch({ type: 'ACKNOWLEDGE_OUTCOME' })}

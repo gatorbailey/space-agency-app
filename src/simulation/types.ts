@@ -51,6 +51,30 @@ export interface ActiveCard {
   drawnOnDay: number
 }
 
+export const ASTRONAUT_SKILLS = ['piloting', 'engineering', 'eva', 'science', 'command', 'public'] as const
+export type AstronautSkill = (typeof ASTRONAUT_SKILLS)[number]
+
+export type AstronautSkills = Record<AstronautSkill, number>
+
+export type AstronautStatus = 'active' | 'reserve' | 'deceased'
+
+export interface AstronautDef {
+  id: string
+  /** Last-names-only roster, per CLAUDE.md's dossier/personnel-file tone. */
+  lastName: string
+  skills: AstronautSkills
+}
+
+export interface Astronaut extends AstronautDef {
+  status: AstronautStatus
+}
+
+export interface RosterState {
+  astronauts: Astronaut[]
+  /** Cap on how many can hold 'active' status at once; the rest sit in Reserve. */
+  activeCap: number
+}
+
 export type PayloadType = 'commercial' | 'research' | 'military'
 
 export interface LaunchPlan {
@@ -83,10 +107,14 @@ export interface GoNoGoStatus {
 export interface LaunchSequenceState {
   missionId: string
   plan: LaunchPlan
+  /** The active-roster astronaut crewing this mission. */
+  astronautId: string
   stage: LaunchStage
   weather: WeatherCheck | null
   stations: GoNoGoStatus[]
   outcome: 'success' | 'failure' | 'scrubbed' | null
+  /** Set once an outcome is resolved, if the assigned astronaut was lost. */
+  astronautLost: boolean
 }
 
 export interface Headline {
@@ -129,6 +157,7 @@ export interface GameState {
   launch: LaunchSequenceState | null
   headlines: Headline[]
   milestone: MilestoneState
+  roster: RosterState
 }
 
 export type GameAction =
@@ -136,13 +165,15 @@ export type GameAction =
   | { type: 'TICK' }
   | { type: 'COLLECT_MATERIALS' }
   | { type: 'RESOLVE_CARD'; cardId: string; optionId: string }
-  | { type: 'START_LAUNCH'; missionId: string }
+  | { type: 'START_LAUNCH'; missionId: string; astronautId: string }
   | { type: 'RUN_WEATHER_CHECK' }
   | { type: 'SCRUB_LAUNCH' }
   | { type: 'PROCEED_TO_GO_NO_GO' }
   | { type: 'OVERRIDE_STATION'; stationId: string }
   | { type: 'COMMIT_LAUNCH' }
   | { type: 'ACKNOWLEDGE_OUTCOME' }
+  | { type: 'PROMOTE_ASTRONAUT'; astronautId: string }
+  | { type: 'DEMOTE_ASTRONAUT'; astronautId: string }
 
 /** Injectable for deterministic tests; defaults to Math.random at the call site. */
 export type Rng = () => number
@@ -165,4 +196,8 @@ export interface GameContent {
   milestone: MilestoneMissionDef
   facility: FacilityState
   startingResources: ResourceState
+  astronautPool: AstronautDef[]
+  /** Ids from astronautPool that start on active duty (rest start in Reserve). */
+  initialActiveIds: string[]
+  activeRosterCap: number
 }

@@ -7,15 +7,21 @@ export function generateHeadlines(
   day: number,
   /** Count of headlines already recorded — keeps ids unique across repeat attempts on the same day. */
   sequence: number,
+  /** Last name of the assigned astronaut, if the mission failure claimed them. */
+  astronautLostLastName: string | null = null,
 ): Headline[] {
   const supporterText =
     outcome === 'success'
       ? `${missionName} SOARS: Daily Supporter hails "a new era of American triumph."`
-      : `Daily Supporter: "${missionName} setback is a lesson learned, not a defeat."`
+      : astronautLostLastName
+        ? `Daily Supporter: "The nation mourns ${astronautLostLastName}, lost in service to ${missionName}."`
+        : `Daily Supporter: "${missionName} setback is a lesson learned, not a defeat."`
   const detractorText =
     outcome === 'success'
       ? `Detractor Weekly: "${missionName} success masks reckless spending."`
-      : `Detractor Weekly: "${missionName} failure was entirely predictable."`
+      : astronautLostLastName
+        ? `Detractor Weekly: "${astronautLostLastName}'s death aboard ${missionName} was a preventable tragedy."`
+        : `Detractor Weekly: "${missionName} failure was entirely predictable."`
 
   return [
     { id: `${missionId}-${day}-${sequence}-supporter`, outlet: 'Daily Supporter', text: supporterText, day },

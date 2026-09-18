@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CARD_POOL } from './content'
+import { AstronautRoster } from './ui/components/AstronautRoster'
 import { ClockControl } from './ui/components/ClockControl'
 import { DecisionCardModal } from './ui/components/DecisionCardModal'
 import { HeadlineFeed } from './ui/components/HeadlineFeed'
@@ -41,8 +42,9 @@ function AppShell() {
         <ClockControl />
       </header>
 
-      <main className="flex-1 px-4 py-4">
+      <main className="flex flex-1 flex-col gap-4 px-4 py-4">
         <MilestonePanel />
+        <AstronautRoster />
       </main>
 
       <HeadlineFeed />

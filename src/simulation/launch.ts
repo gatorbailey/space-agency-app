@@ -1,4 +1,5 @@
 import type {
+  Astronaut,
   GameState,
   GoNoGoStationDef,
   GoNoGoStatus,
@@ -24,6 +25,7 @@ type StationEvaluator = (
   plan: LaunchPlan,
   weather: WeatherCheck,
   rng: Rng,
+  astronaut: Astronaut,
 ) => { isGo: boolean; reasoning: string }
 
 const STATION_EVALUATORS: Record<string, StationEvaluator> = {
@@ -54,20 +56,24 @@ const STATION_EVALUATORS: Record<string, StationEvaluator> = {
       ? `${weather.temperatureF}°F is comfortably above the ${weather.thresholdF}°F safety floor.`
       : `${weather.temperatureF}°F is below the ${weather.thresholdF}°F safety floor — cold-soak risk on seals.`,
   }),
-  'flight-surgeon': (state, _plan, _weather, rng) => {
-    const readiness = state.resources.crewReadiness
-    const noGoChance = (100 - readiness) / 300
+  'flight-surgeon': (state, _plan, _weather, rng, astronaut) => {
+    // The flight surgeon clears the assigned crew member, not ground crew —
+    // piloting skill stands in for flight experience/fitness here.
+    const combined = (state.resources.crewReadiness + astronaut.skills.piloting) / 2
+    const noGoChance = (100 - combined) / 300
     const isGo = rng() > noGoChance
     return {
       isGo,
       reasoning: isGo
-        ? 'Crew cleared medically for flight.'
-        : 'Crew fatigue from a strained readiness cycle is a medical concern.',
+        ? `${astronaut.lastName} cleared medically for flight.`
+        : `${astronaut.lastName} shows fatigue from a strained readiness cycle — a medical concern.`,
     }
   },
-  payload: (state, plan, _weather, rng) => {
+  payload: (state, plan, _weather, rng, astronaut) => {
     const cost = plan.payloadType === 'military' ? 40 : plan.payloadType === 'research' ? 25 : 15
-    const isGo = state.resources.materials >= cost || rng() > 0.3
+    // A strong engineering astronaut helps catch integration issues early.
+    const engineeringBonus = astronaut.skills.engineering > 70 ? 0.1 : 0
+    const isGo = state.resources.materials >= cost || rng() > 0.3 - engineeringBonus
     return {
       isGo,
       reasoning: isGo
@@ -83,9 +89,10 @@ export function evaluateStation(
   plan: LaunchPlan,
   weather: WeatherCheck,
   rng: Rng,
+  astronaut: Astronaut,
 ): GoNoGoStatus {
   const evaluate = STATION_EVALUATORS[def.id] ?? (() => ({ isGo: true, reasoning: 'Nominal.' }))
-  const { isGo, reasoning } = evaluate(state, plan, weather, rng)
+  const { isGo, reasoning } = evaluate(state, plan, weather, rng, astronaut)
   return { stationId: def.id, isGo, reasoning, overridden: false }
 }
 
@@ -93,6 +100,7 @@ export function resolveOutcome(
   weather: WeatherCheck,
   stations: GoNoGoStatus[],
   plan: LaunchPlan,
+  astronaut: Astronaut,
   rng: Rng,
 ): 'success' | 'failure' {
   let failureChance = 0.05
@@ -100,6 +108,18 @@ export function resolveOutcome(
   const overriddenNoGos = stations.filter((s) => !s.isGo && s.overridden)
   failureChance += overriddenNoGos.length * 0.2
   failureChance += (plan.riskThreshold / 100) * 0.15
-  failureChance = Math.min(0.9, failureChance)
+  // A skilled, experienced commander shaves a little off the odds.
+  failureChance -= ((astronaut.skills.command - 50) / 1000) * 2
+  failureChance = Math.min(0.9, Math.max(0.02, failureChance))
   return rng() < failureChance ? 'failure' : 'success'
+}
+
+/**
+ * Whether a failed launch happened under conditions the player could have
+ * avoided (an unsafe-weather launch, or an overridden no-go) — used to scale
+ * the chance the assigned astronaut is lost, per CLAUDE.md: death is a real
+ * outcome but disaster analogs should be avoidable via player choice.
+ */
+export function wasAvoidableRisk(weather: WeatherCheck, stations: GoNoGoStatus[]): boolean {
+  return !weather.isSafe || stations.some((s) => s.overridden)
 }
