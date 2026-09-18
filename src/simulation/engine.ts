@@ -7,6 +7,8 @@ import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from '
 import { hasTech, TECH_IDS } from './tech'
 import { isTourOnCooldown, resolveTour } from './tours'
 import { canProcure, procure } from './materials'
+import { applyOpsEffect, dailyOpsCost, dailyOpsEffect } from './ops'
+import { OPS_CATEGORIES } from './types'
 import type { FacilityState, GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
@@ -83,6 +85,7 @@ export function createInitialState(content: GameContent): GameState {
     lastExpiredCard: null,
     lastBudgetCycleDay: 0,
     lastAppropriation: null,
+    opsAllocation: Object.fromEntries(OPS_CATEGORIES.map((id) => [id, 0])) as GameState['opsAllocation'],
   }
 }
 
@@ -103,7 +106,7 @@ export function gameReducer(
       const day = state.day + 1
       const pendingParts = Math.min(state.facility.partsStorageCap, state.pendingParts + state.facility.partsPerDay)
       const pendingFuel = Math.min(state.facility.fuelStorageCap, state.pendingFuel + state.facility.fuelPerDay)
-      const pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
+      let pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
 
       // Unanswered cards past their deadline auto-resolve via onExpireOptionId
       // — some administrative business doesn't wait for the player.
@@ -149,6 +152,21 @@ export function gameReducer(
         lastAppropriation = { day, amount, sentimentAtCycle: resources.sentiment }
       }
 
+      // Ongoing ops spend: each category is an independent daily dial the
+      // player sets via SET_OPS_ALLOCATION. All-or-nothing per category per
+      // day, same affordability gate as procurement/research — no partial
+      // funding.
+      for (const def of content.opsCategories) {
+        const allocation = state.opsAllocation[def.id] ?? 0
+        if (allocation <= 0) continue
+        const cost = dailyOpsCost(def, allocation)
+        if (cost > 0 && !canAfford(resources, { budget: -cost })) continue
+        resources = applyDelta(resources, { budget: -cost })
+        const applied = applyOpsEffect(resources, pendingRD, state.facility, dailyOpsEffect(def, allocation))
+        resources = applied.resources
+        pendingRD = applied.pendingRD
+      }
+
       return {
         ...state,
         day,
@@ -190,6 +208,20 @@ export function gameReducer(
       if (!def) return state
       if (!canProcure(state.resources, def)) return state
       return { ...state, resources: procure(state.resources, def) }
+    }
+
+    case 'SET_OPS_ALLOCATION': {
+      const amount = Math.max(0, Math.min(100, action.amount))
+      return { ...state, opsAllocation: { ...state.opsAllocation, [action.category]: amount } }
+    }
+
+    case 'SURGE_OPS': {
+      const def = content.opsCategories.find((o) => o.id === action.category)
+      if (!def) return state
+      if (!canAfford(state.resources, { budget: -def.surgeCost })) return state
+      const resources = applyDelta(state.resources, { budget: -def.surgeCost })
+      const applied = applyOpsEffect(resources, state.pendingRD, state.facility, def.surgeEffect)
+      return { ...state, resources: applied.resources, pendingRD: applied.pendingRD }
     }
 
     case 'COLLECT_RD': {

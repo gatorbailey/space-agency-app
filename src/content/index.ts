@@ -4,6 +4,7 @@ import { BUDGET_CYCLE } from './budget'
 import { CARD_POOL } from './cards'
 import { MATERIAL_LABELS, PROCUREMENT } from './materials'
 import { MILESTONES } from './milestones'
+import { OPS_CATEGORY_DEFS } from './ops'
 import { FACILITY, WEATHER_PROFILE } from './site'
 import { GO_NO_GO_STATIONS } from './stations'
 import { TECH_TREE } from './techTree'
@@ -30,6 +31,7 @@ export const GAME_CONTENT: GameContent = {
   tours: TOURS,
   procurement: PROCUREMENT,
   budgetCycle: BUDGET_CYCLE,
+  opsCategories: OPS_CATEGORY_DEFS,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
   astronautPool: ASTRONAUT_POOL,
@@ -44,6 +46,7 @@ export {
   GO_NO_GO_STATIONS,
   MATERIAL_LABELS,
   MILESTONES,
+  OPS_CATEGORY_DEFS,
   PROCUREMENT,
   TECH_TREE,
   TOURS,

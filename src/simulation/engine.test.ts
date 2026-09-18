@@ -81,6 +81,27 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
       { materialType: 'provisions', budgetCost: 100, amount: 10 },
     ],
     budgetCycle: { cycleDays: 5, baseAppropriation: 200, budgetPerSentiment: 2 },
+    opsCategories: [
+      { id: 'research', label: 'R&D Overtime', description: '', maxDailyCost: 60, dailyEffect: { rd: 3 }, surgeCost: 800, surgeEffect: { rd: 15 } },
+      {
+        id: 'training',
+        label: 'Crew Training',
+        description: '',
+        maxDailyCost: 40,
+        dailyEffect: { crewReadiness: 1.5 },
+        surgeCost: 600,
+        surgeEffect: { crewReadiness: 8 },
+      },
+      {
+        id: 'publicAffairs',
+        label: 'Public Affairs',
+        description: '',
+        maxDailyCost: 50,
+        dailyEffect: { sentiment: 1 },
+        surgeCost: 700,
+        surgeEffect: { sentiment: 6 },
+      },
+    ],
     facility: { partsPerDay: 5, partsStorageCap: 20, fuelPerDay: 3, fuelStorageCap: 15, rdPerDay: 2, rdStorageCap: 10 },
     startingResources: {
       sentiment: 50,
@@ -230,6 +251,76 @@ describe('budget cycle', () => {
     }
     expect(state.resources.budget).toBe(1600) // two grants of 300
     expect(state.lastBudgetCycleDay).toBe(10)
+  })
+})
+
+describe('ops budget', () => {
+  it('SET_OPS_ALLOCATION clamps to 0-100', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_OPS_ALLOCATION', category: 'training', amount: 150 }, content, alwaysGo)
+    expect(state.opsAllocation.training).toBe(100)
+    state = gameReducer(state, { type: 'SET_OPS_ALLOCATION', category: 'training', amount: -20 }, content, alwaysGo)
+    expect(state.opsAllocation.training).toBe(0)
+  })
+
+  it('spends the daily ops cost and applies a scaled direct effect each tick', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_OPS_ALLOCATION', category: 'training', amount: 50 }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.resources.budget).toBe(980) // 1000 - round(0.5 * 40)
+    expect(state.resources.crewReadiness).toBe(70.75) // 70 + 1.5 * 0.5
+  })
+
+  it('routes a scaled R&D effect into the pending buffer, not straight into resources', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_OPS_ALLOCATION', category: 'research', amount: 100 }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.resources.budget).toBe(940) // 1000 - 60
+    expect(state.pendingRD).toBe(5) // 2 passive + 3 from ops, both pre-collect
+    expect(state.resources.rd).toBe(0)
+  })
+
+  it('skips funding for a day it cannot afford, leaving that category untouched', () => {
+    const content = makeContent({
+      startingResources: {
+        sentiment: 50,
+        budget: 10,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_OPS_ALLOCATION', category: 'training', amount: 100 }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.resources.budget).toBe(10)
+    expect(state.resources.crewReadiness).toBe(70)
+  })
+
+  it('SURGE_OPS spends the lump cost for the immediate lump effect', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SURGE_OPS', category: 'publicAffairs' }, content, alwaysGo)
+    expect(state.resources.budget).toBe(300) // 1000 - 700
+    expect(state.resources.sentiment).toBe(56) // 50 + 6
+  })
+
+  it('SURGE_OPS is blocked when unaffordable, leaving state untouched', () => {
+    const content = makeContent()
+    const state = createInitialState(content)
+    const poor = { ...state, resources: { ...state.resources, budget: 50 } }
+    const blocked = gameReducer(poor, { type: 'SURGE_OPS', category: 'research' }, content, alwaysGo) // surgeCost 800 > 50
+    expect(blocked).toBe(poor)
   })
 })
 

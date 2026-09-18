@@ -70,6 +70,31 @@ export interface AppropriationEvent {
   sentimentAtCycle: number
 }
 
+/**
+ * Ongoing operations spend, per CLAUDE.md's "sliders that allow the ongoing
+ * operations... budget to be managed." Each category is an independent
+ * daily dial (0-100%) converting held Budget into steady growth of a
+ * resource that has no other direct-purchase mechanic (unlike Materials,
+ * which already have Procurement) — R&D, Crew Readiness, and Sentiment.
+ */
+export const OPS_CATEGORIES = ['research', 'training', 'publicAffairs'] as const
+export type OpsCategory = (typeof OPS_CATEGORIES)[number]
+
+export type OpsAllocation = Record<OpsCategory, number>
+
+export interface OpsCategoryDef {
+  id: OpsCategory
+  label: string
+  description: string
+  /** Budget spent per day at 100% allocation. */
+  maxDailyCost: number
+  /** Resource gained per day at 100% allocation. */
+  dailyEffect: ResourceDelta
+  /** One-time discrete purchase, separate from the ongoing daily dial. */
+  surgeCost: number
+  surgeEffect: ResourceDelta
+}
+
 export interface DecisionOption {
   id: string
   label: string
@@ -278,6 +303,8 @@ export interface GameState {
   lastBudgetCycleDay: number
   /** Most recent appropriation cycle's grant, for UI feedback. */
   lastAppropriation: AppropriationEvent | null
+  /** Player-set daily spend (0-100%) per ops category. */
+  opsAllocation: OpsAllocation
 }
 
 export interface ExpiredCard {
@@ -293,6 +320,8 @@ export type GameAction =
   | { type: 'COLLECT_FUEL' }
   | { type: 'COLLECT_RD' }
   | { type: 'PROCURE_MATERIAL'; materialType: MaterialType }
+  | { type: 'SET_OPS_ALLOCATION'; category: OpsCategory; amount: number }
+  | { type: 'SURGE_OPS'; category: OpsCategory }
   | { type: 'RESEARCH_TECH'; techId: string }
   | { type: 'RESOLVE_CARD'; cardId: string; optionId: string }
   | { type: 'START_LAUNCH'; missionId: string; astronautId: string }
@@ -330,6 +359,7 @@ export interface GameContent {
   tours: TourDef[]
   procurement: ProcurementDef[]
   budgetCycle: BudgetCycleDef
+  opsCategories: OpsCategoryDef[]
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]

@@ -1,10 +1,23 @@
-import { GAME_CONTENT } from '../../content'
-import { daysUntilBudgetCycle, estimateAppropriation } from '../../simulation'
+import { GAME_CONTENT, OPS_CATEGORY_DEFS } from '../../content'
+import { canAfford, dailyOpsCost, dailyOpsEffect, daysUntilBudgetCycle, estimateAppropriation } from '../../simulation'
+import type { OpsCategoryDef, ResourceDelta } from '../../simulation'
 import { useGame } from '../useGame'
 import { Stat } from './Stat'
 
 function formatBudget(value: number): string {
   return `$${Math.round(value).toLocaleString()}`
+}
+
+function fmtAmount(n: number): string {
+  return Number.isInteger(n) ? `${n}` : n.toFixed(1)
+}
+
+/** These 3 ops categories only ever touch one of these keys each. */
+function formatGain(effect: ResourceDelta): string {
+  if (effect.rd) return `+${fmtAmount(effect.rd)} R&D`
+  if (effect.crewReadiness) return `+${fmtAmount(effect.crewReadiness)} Crew Readiness`
+  if (effect.sentiment) return `+${fmtAmount(effect.sentiment)} Sentiment`
+  return ''
 }
 
 export function BudgetOffice() {
@@ -51,6 +64,56 @@ export function BudgetOffice() {
           {Math.round(lastAppropriation.sentimentAtCycle)}.
         </p>
       )}
+
+      <h4 className="mt-5 text-xs font-semibold tracking-wide text-slate-500 uppercase">Operations Budget</h4>
+      <p className="mt-1 text-xs text-slate-500">
+        Each dial spends from Budget every day it's funded; a Surge spends once for an immediate result instead.
+      </p>
+      <ul className="mt-2 flex flex-col gap-2">
+        {OPS_CATEGORY_DEFS.map((def) => (
+          <OpsCategoryRow key={def.id} def={def} />
+        ))}
+      </ul>
     </div>
+  )
+}
+
+function OpsCategoryRow({ def }: { def: OpsCategoryDef }) {
+  const { state, dispatch } = useGame()
+  const allocation = state.opsAllocation[def.id]
+  const cost = dailyOpsCost(def, allocation)
+  const gain = dailyOpsEffect(def, allocation)
+  const surgeAffordable = canAfford(state.resources, { budget: -def.surgeCost })
+
+  return (
+    <li className="rounded border border-slate-700 bg-slate-800/50 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-100">{def.label}</span>
+        <span className="shrink-0 font-mono text-xs text-slate-400">
+          {allocation}% — {formatBudget(cost)}/day
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-400">{def.description}</p>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={allocation}
+        onChange={(e) =>
+          dispatch({ type: 'SET_OPS_ALLOCATION', category: def.id, amount: Number(e.target.value) })
+        }
+        className="mt-2 w-full accent-emerald-500"
+      />
+      {allocation > 0 && <p className="mt-1 text-xs text-slate-500">{formatGain(gain)}/day at current allocation</p>}
+      <button
+        type="button"
+        disabled={!surgeAffordable}
+        onClick={() => dispatch({ type: 'SURGE_OPS', category: def.id })}
+        className="mt-2 rounded border border-sky-700 px-3 py-1 text-xs font-semibold text-sky-300 transition hover:bg-sky-950 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Surge — {formatBudget(def.surgeCost)} for {formatGain(def.surgeEffect)}
+      </button>
+    </li>
   )
 }
