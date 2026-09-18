@@ -4,6 +4,7 @@ import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
 import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
 import { hasTech, TECH_IDS } from './tech'
+import { isTourOnCooldown, resolveTour } from './tours'
 import type { FacilityState, GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
@@ -74,6 +75,8 @@ export function createInitialState(content: GameContent): GameState {
         status: content.initialActiveIds.includes(def.id) ? 'active' : 'reserve',
       })),
     },
+    lastTourDay: {},
+    lastTourOutcome: null,
   }
 }
 
@@ -304,6 +307,23 @@ export function gameReducer(
 
     case 'DEMOTE_ASTRONAUT': {
       return { ...state, roster: demoteAstronaut(state.roster, action.astronautId) }
+    }
+
+    case 'HOST_TOUR': {
+      const tourDef = content.tours.find((t) => t.type === action.tourType)
+      if (!tourDef) return state
+      if (isTourOnCooldown(tourDef, state.day, state.lastTourDay[tourDef.type])) return state
+      if (!canAfford(state.resources, tourDef.cost)) return state
+
+      const { resourceDelta, outcome } = resolveTour(tourDef, state.day, rng)
+      const resources = applyDelta(applyDelta(state.resources, tourDef.cost), resourceDelta)
+
+      return {
+        ...state,
+        resources,
+        lastTourDay: { ...state.lastTourDay, [tourDef.type]: state.day },
+        lastTourOutcome: outcome,
+      }
     }
 
     default:

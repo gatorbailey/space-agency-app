@@ -5,6 +5,7 @@ import { MILESTONES } from './milestones'
 import { FACILITY, WEATHER_PROFILE } from './site'
 import { GO_NO_GO_STATIONS } from './stations'
 import { TECH_TREE } from './techTree'
+import { TOURS } from './tours'
 
 export const STARTING_RESOURCES: ResourceState = {
   sentiment: 50,
@@ -20,6 +21,7 @@ export const GAME_CONTENT: GameContent = {
   weatherProfile: WEATHER_PROFILE,
   milestones: MILESTONES,
   techTree: TECH_TREE,
+  tours: TOURS,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
   astronautPool: ASTRONAUT_POOL,
@@ -27,5 +29,5 @@ export const GAME_CONTENT: GameContent = {
   activeRosterCap: ACTIVE_ROSTER_CAP,
 }
 
-export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONES, TECH_TREE, WEATHER_PROFILE }
+export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONES, TECH_TREE, TOURS, WEATHER_PROFILE }
 export { SITE_NAME } from './site'

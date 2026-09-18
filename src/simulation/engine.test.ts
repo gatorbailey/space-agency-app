@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, gameReducer } from './engine'
 import { TECH_IDS } from './tech'
-import type { AstronautDef, DecisionCardDef, GameContent } from './types'
+import type { AstronautDef, DecisionCardDef, GameContent, TourDef } from './types'
 
 const neutralSkills = { piloting: 50, engineering: 50, eva: 50, science: 50, command: 50, public: 50 }
 
@@ -53,6 +53,7 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
       },
     ],
     techTree: [],
+    tours: [],
     facility: { materialsPerDay: 5, materialsStorageCap: 20, rdPerDay: 2, rdStorageCap: 10 },
     startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70, rd: 0 },
     astronautPool: [testAstronaut, reserveAstronaut],
@@ -833,5 +834,113 @@ describe('infrastructure tech tree', () => {
 
     expect(flightSurgeonIsGo([])).toBe(false)
     expect(flightSurgeonIsGo([TECH_IDS.trainingCenterTier])).toBe(true)
+  })
+})
+
+/** Returns queued values in order, repeating the last one once exhausted. */
+function rngSequence(values: number[]): () => number {
+  let i = 0
+  return () => values[Math.min(i++, values.length - 1)]
+}
+
+describe('site tours', () => {
+  const testTour: TourDef = {
+    type: 'public',
+    name: 'Test Public Tour',
+    description: '',
+    cost: {},
+    cooldownDays: 10,
+    sentimentGain: 3,
+    mishapChance: 0.15,
+    mishapSentimentPenalty: 2,
+    successFlavor: ['Success flavor.'],
+    mishapFlavor: ['Mishap flavor.'],
+  }
+
+  const testVipTour: TourDef = {
+    type: 'vip',
+    name: 'Test VIP Tour',
+    description: '',
+    cost: { budget: -1500 },
+    cooldownDays: 25,
+    sentimentGain: 9,
+    mishapChance: 0.3,
+    mishapSentimentPenalty: 6,
+    bonusBudgetChance: 0.3,
+    bonusBudgetAmount: 3000,
+    successFlavor: ['VIP success.'],
+    mishapFlavor: ['VIP mishap.'],
+  }
+
+  it('a clean success applies the sentiment gain and records the outcome', () => {
+    const content = makeContent({ tours: [testTour] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysGo)
+    expect(state.resources.sentiment).toBe(53) // 50 + 3
+    expect(state.lastTourOutcome?.mishap).toBe(false)
+    expect(state.lastTourOutcome?.type).toBe('public')
+    expect(state.lastTourDay.public).toBe(0)
+  })
+
+  it('a mishap applies the sentiment penalty instead', () => {
+    const content = makeContent({ tours: [testTour] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysFail)
+    expect(state.resources.sentiment).toBe(48) // 50 - 2
+    expect(state.lastTourOutcome?.mishap).toBe(true)
+  })
+
+  it('is blocked while on cooldown', () => {
+    const content = makeContent({ tours: [testTour] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysGo)
+    const afterFirst = state
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysGo)
+    expect(state).toBe(afterFirst) // unchanged, still on cooldown at the same day
+  })
+
+  it('is available again once the cooldown elapses', () => {
+    const content = makeContent({ tours: [testTour] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysGo)
+    state = { ...state, day: state.day + testTour.cooldownDays }
+    const before = state
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, alwaysGo)
+    expect(state).not.toBe(before)
+    expect(state.lastTourDay.public).toBe(testTour.cooldownDays)
+  })
+
+  it('is blocked when the cost cannot be afforded', () => {
+    const content = makeContent({
+      tours: [testVipTour],
+      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70, rd: 0 },
+    })
+    const state = createInitialState(content)
+    const next = gameReducer(state, { type: 'HOST_TOUR', tourType: 'vip' }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('VIP tours can grant a bonus budget windfall on a clean success', () => {
+    const content = makeContent({
+      tours: [testVipTour],
+      startingResources: { sentiment: 50, budget: 10000, materials: 10, crewReadiness: 70, rd: 0 },
+    })
+    let state = createInitialState(content)
+    // mishap check (0.5 < 0.3 false -> success), bonus check (0.1 < 0.3 true -> bonus), flavor pick
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'vip' }, content, rngSequence([0.5, 0.1, 0]))
+    expect(state.resources.budget).toBe(10000 - 1500 + 3000)
+    expect(state.lastTourOutcome?.bonusBudget).toBe(true)
+  })
+
+  it('VIP tours do not grant the bonus when the roll misses it', () => {
+    const content = makeContent({
+      tours: [testVipTour],
+      startingResources: { sentiment: 50, budget: 10000, materials: 10, crewReadiness: 70, rd: 0 },
+    })
+    let state = createInitialState(content)
+    // mishap check (0.5 < 0.3 false -> success), bonus check (0.5 < 0.3 false -> no bonus), flavor pick
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'vip' }, content, rngSequence([0.5, 0.5, 0]))
+    expect(state.resources.budget).toBe(10000 - 1500)
+    expect(state.lastTourOutcome?.bonusBudget).toBe(false)
   })
 })

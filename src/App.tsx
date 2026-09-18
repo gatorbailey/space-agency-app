@@ -7,6 +7,7 @@ import { HeadlineFeed } from './ui/components/HeadlineFeed'
 import { LaunchSequenceModal } from './ui/components/LaunchSequenceModal'
 import { MilestoneList } from './ui/components/MilestoneList'
 import { ResourceBar } from './ui/components/ResourceBar'
+import { SiteTours } from './ui/components/SiteTours'
 import { StatusMenu } from './ui/components/StatusMenu'
 import { TechTree } from './ui/components/TechTree'
 import { GameProvider } from './ui/GameContext'
@@ -45,6 +46,7 @@ function AppShell() {
 
       <main className="flex flex-1 flex-col gap-4 px-4 py-4">
         <MilestoneList />
+        <SiteTours />
         <TechTree />
         <AstronautRoster />
       </main>

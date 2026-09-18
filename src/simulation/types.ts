@@ -150,6 +150,34 @@ export interface MilestoneState {
   succeeded: boolean | null
 }
 
+export type TourType = 'public' | 'vip'
+
+export interface TourDef {
+  type: TourType
+  name: string
+  description: string
+  /** Deducted from resources on hosting — a negative delta. */
+  cost: ResourceDelta
+  /** Minimum sim-days between hostings of this tour type. */
+  cooldownDays: number
+  sentimentGain: number
+  mishapChance: number
+  mishapSentimentPenalty: number
+  /** VIP only: chance of an extra budget windfall on a clean success. */
+  bonusBudgetChance?: number
+  bonusBudgetAmount?: number
+  successFlavor: string[]
+  mishapFlavor: string[]
+}
+
+export interface TourOutcome {
+  type: TourType
+  day: number
+  mishap: boolean
+  text: string
+  bonusBudget: boolean
+}
+
 export interface TechNodeDef {
   id: string
   name: string
@@ -184,6 +212,9 @@ export interface GameState {
   /** Keyed by mission id — one entry per mission in content.milestones. */
   milestones: Record<string, MilestoneState>
   roster: RosterState
+  /** Sim day each tour type was last hosted, for cooldown gating. */
+  lastTourDay: Partial<Record<TourType, number>>
+  lastTourOutcome: TourOutcome | null
 }
 
 export type GameAction =
@@ -202,6 +233,7 @@ export type GameAction =
   | { type: 'ACKNOWLEDGE_OUTCOME' }
   | { type: 'PROMOTE_ASTRONAUT'; astronautId: string }
   | { type: 'DEMOTE_ASTRONAUT'; astronautId: string }
+  | { type: 'HOST_TOUR'; tourType: TourType }
 
 /** Injectable for deterministic tests; defaults to Math.random at the call site. */
 export type Rng = () => number
@@ -224,6 +256,7 @@ export interface GameContent {
   /** Ordered chain of missions; a mission with a prerequisiteMissionId unlocks after it. */
   milestones: MilestoneMissionDef[]
   techTree: TechNodeDef[]
+  tours: TourDef[]
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]
