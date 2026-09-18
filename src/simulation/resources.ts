@@ -3,9 +3,13 @@ import type { ResourceDelta, ResourceState } from './types'
 const BOUNDS: Record<keyof ResourceState, [number, number]> = {
   sentiment: [0, 100],
   budget: [0, Number.POSITIVE_INFINITY],
-  materials: [0, Number.POSITIVE_INFINITY],
   crewReadiness: [0, 100],
   rd: [0, Number.POSITIVE_INFINITY],
+  parts: [0, Number.POSITIVE_INFINITY],
+  fuel: [0, Number.POSITIVE_INFINITY],
+  payload: [0, Number.POSITIVE_INFINITY],
+  safetyGear: [0, Number.POSITIVE_INFINITY],
+  provisions: [0, Number.POSITIVE_INFINITY],
 }
 
 export function clampResource(key: keyof ResourceState, value: number): number {

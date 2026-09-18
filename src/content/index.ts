@@ -1,6 +1,7 @@
 import type { GameContent, ResourceState } from '../simulation'
 import { ACTIVE_ROSTER_CAP, ASTRONAUT_POOL, INITIAL_ACTIVE_ASTRONAUT_IDS } from './astronauts'
 import { CARD_POOL } from './cards'
+import { MATERIAL_LABELS, PROCUREMENT } from './materials'
 import { MILESTONES } from './milestones'
 import { FACILITY, WEATHER_PROFILE } from './site'
 import { GO_NO_GO_STATIONS } from './stations'
@@ -10,9 +11,13 @@ import { TOURS } from './tours'
 export const STARTING_RESOURCES: ResourceState = {
   sentiment: 50,
   budget: 12000,
-  materials: 20,
   crewReadiness: 70,
   rd: 0,
+  parts: 20,
+  fuel: 15,
+  payload: 10,
+  safetyGear: 10,
+  provisions: 10,
 }
 
 export const GAME_CONTENT: GameContent = {
@@ -22,6 +27,7 @@ export const GAME_CONTENT: GameContent = {
   milestones: MILESTONES,
   techTree: TECH_TREE,
   tours: TOURS,
+  procurement: PROCUREMENT,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
   astronautPool: ASTRONAUT_POOL,
@@ -29,5 +35,15 @@ export const GAME_CONTENT: GameContent = {
   activeRosterCap: ACTIVE_ROSTER_CAP,
 }
 
-export { ASTRONAUT_POOL, CARD_POOL, GO_NO_GO_STATIONS, MILESTONES, TECH_TREE, TOURS, WEATHER_PROFILE }
+export {
+  ASTRONAUT_POOL,
+  CARD_POOL,
+  GO_NO_GO_STATIONS,
+  MATERIAL_LABELS,
+  MILESTONES,
+  PROCUREMENT,
+  TECH_TREE,
+  TOURS,
+  WEATHER_PROFILE,
+}
 export { SITE_NAME } from './site'

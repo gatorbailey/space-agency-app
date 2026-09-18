@@ -1,15 +1,8 @@
 import { TECH_TREE } from '../../content'
 import { canAfford } from '../../simulation'
-import type { ResourceDelta, TechNodeDef } from '../../simulation'
+import type { TechNodeDef } from '../../simulation'
+import { formatCost } from '../formatCost'
 import { useGame } from '../useGame'
-
-function formatCost(cost: ResourceDelta): string {
-  const parts: string[] = []
-  if (cost.rd) parts.push(`${Math.abs(cost.rd)} R&D`)
-  if (cost.budget) parts.push(`$${Math.abs(cost.budget).toLocaleString()} budget`)
-  if (cost.materials) parts.push(`${Math.abs(cost.materials)} materials`)
-  return parts.join(', ')
-}
 
 export function TechTree() {
   const knowledgeNodes = TECH_TREE.filter((n) => n.category === 'knowledge')
@@ -18,9 +11,7 @@ export function TechTree() {
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 p-4">
       <h3 className="font-semibold text-slate-100">Tech Tree</h3>
-      <p className="mt-1 text-xs text-slate-500">
-        Research spends R&amp;D and budget/materials on permanent upgrades.
-      </p>
+      <p className="mt-1 text-xs text-slate-500">Research spends R&amp;D, budget, and materials on permanent upgrades.</p>
 
       <h4 className="mt-4 text-xs font-semibold tracking-wide text-slate-500 uppercase">Knowledge</h4>
       <ul className="mt-2 flex flex-col gap-2">

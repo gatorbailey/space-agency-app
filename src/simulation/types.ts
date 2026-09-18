@@ -10,23 +10,42 @@ export type ClockSpeed = 'paused' | 'normal' | 'fast' | 'faster'
  */
 export type Severity = 'flag' | 'pause'
 
-export interface ResourceState {
+/**
+ * Raw Materials split by type, per CLAUDE.md's "regionally sourced, real
+ * supply-chain mechanic" note. Parts and Fuel are on-base production (the
+ * passive-accrual pair, mirroring R&D); Payload, Safety Gear, and Provisions
+ * are driven by contractor activity — cards, mission effects, and direct
+ * procurement rather than a daily tick.
+ */
+export const MATERIAL_TYPES = ['parts', 'fuel', 'payload', 'safetyGear', 'provisions'] as const
+export type MaterialType = (typeof MATERIAL_TYPES)[number]
+
+export type ResourceState = {
   sentiment: number
   budget: number
-  materials: number
   crewReadiness: number
   /** Spent on the knowledge tech tree. */
   rd: number
-}
+} & Record<MaterialType, number>
 
 export type ResourceDelta = Partial<ResourceState>
 
 export interface FacilityState {
-  materialsPerDay: number
+  partsPerDay: number
   /** Storage cap on the *uncollected* buffer — the daily-engagement hook. */
-  materialsStorageCap: number
+  partsStorageCap: number
+  fuelPerDay: number
+  fuelStorageCap: number
   rdPerDay: number
   rdStorageCap: number
+}
+
+export interface ProcurementDef {
+  materialType: MaterialType
+  /** Cost to rush-order one batch from a contractor. */
+  budgetCost: number
+  /** Units gained per order. */
+  amount: number
 }
 
 export interface DecisionOption {
@@ -212,8 +231,10 @@ export interface GameState {
   isHardPaused: boolean
   resources: ResourceState
   facility: FacilityState
-  /** Materials accrued passively but not yet collected into `resources.materials`. */
-  pendingMaterials: number
+  /** Parts accrued passively but not yet collected into `resources.parts`. */
+  pendingParts: number
+  /** Fuel accrued passively but not yet collected into `resources.fuel`. */
+  pendingFuel: number
   /** R&D accrued passively but not yet collected into `resources.rd`. */
   pendingRD: number
   /** Ids of researched knowledge-tech nodes. */
@@ -242,8 +263,10 @@ export interface ExpiredCard {
 export type GameAction =
   | { type: 'SET_SPEED'; speed: ClockSpeed }
   | { type: 'TICK' }
-  | { type: 'COLLECT_MATERIALS' }
+  | { type: 'COLLECT_PARTS' }
+  | { type: 'COLLECT_FUEL' }
   | { type: 'COLLECT_RD' }
+  | { type: 'PROCURE_MATERIAL'; materialType: MaterialType }
   | { type: 'RESEARCH_TECH'; techId: string }
   | { type: 'RESOLVE_CARD'; cardId: string; optionId: string }
   | { type: 'START_LAUNCH'; missionId: string; astronautId: string }
@@ -279,6 +302,7 @@ export interface GameContent {
   milestones: MilestoneMissionDef[]
   techTree: TechNodeDef[]
   tours: TourDef[]
+  procurement: ProcurementDef[]
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]

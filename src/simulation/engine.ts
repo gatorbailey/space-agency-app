@@ -5,6 +5,7 @@ import { applyDelta, canAfford } from './resources'
 import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
 import { hasTech, TECH_IDS } from './tech'
 import { isTourOnCooldown, resolveTour } from './tours'
+import { canProcure, procure } from './materials'
 import type { FacilityState, GameAction, GameContent, GameState, ResourceDelta, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
@@ -16,13 +17,13 @@ const CARD_DRAW_CHANCE_PER_DAY = 0.35
 const RISKY_DEATH_CHANCE = 0.35
 const SAFE_DEATH_CHANCE = 0.08
 
-/** Materials Science adds this many materials/day to the base facility rate. */
+/** Materials Science adds this many Parts/day to the base facility rate. */
 const MATERIALS_SCIENCE_BONUS = 4
 
 /** R&D Lab Tier adds this many R&D/day to the base facility rate. */
 const RD_LAB_TIER_BONUS = 5
 
-/** Fueling Depot Tier adds this much to the materials storage cap. */
+/** Fueling Depot Tier adds this much to the Fuel storage cap. */
 const FUELING_DEPOT_STORAGE_BONUS = 20
 
 /** Life Support halves the crew-readiness penalty from a failed mission. */
@@ -36,8 +37,8 @@ function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): R
 
 /** Facility upgrades some tech nodes grant, applied once at research time. */
 const FACILITY_BONUSES: Partial<Record<string, Partial<FacilityState>>> = {
-  [TECH_IDS.materialsScience]: { materialsPerDay: MATERIALS_SCIENCE_BONUS },
-  [TECH_IDS.fuelingDepotTier]: { materialsStorageCap: FUELING_DEPOT_STORAGE_BONUS },
+  [TECH_IDS.materialsScience]: { partsPerDay: MATERIALS_SCIENCE_BONUS },
+  [TECH_IDS.fuelingDepotTier]: { fuelStorageCap: FUELING_DEPOT_STORAGE_BONUS },
   [TECH_IDS.rdLabTier]: { rdPerDay: RD_LAB_TIER_BONUS },
 }
 
@@ -58,7 +59,8 @@ export function createInitialState(content: GameContent): GameState {
     isHardPaused: false,
     resources: { ...content.startingResources },
     facility: { ...content.facility },
-    pendingMaterials: 0,
+    pendingParts: 0,
+    pendingFuel: 0,
     pendingRD: 0,
     unlockedTech: [],
     activeCards: [],
@@ -96,10 +98,8 @@ export function gameReducer(
     case 'TICK': {
       if (state.isHardPaused || state.speed === 'paused') return state
       const day = state.day + 1
-      const pendingMaterials = Math.min(
-        state.facility.materialsStorageCap,
-        state.pendingMaterials + state.facility.materialsPerDay,
-      )
+      const pendingParts = Math.min(state.facility.partsStorageCap, state.pendingParts + state.facility.partsPerDay)
+      const pendingFuel = Math.min(state.facility.fuelStorageCap, state.pendingFuel + state.facility.fuelPerDay)
       const pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
 
       // Unanswered cards past their deadline auto-resolve via onExpireOptionId
@@ -137,7 +137,8 @@ export function gameReducer(
       return {
         ...state,
         day,
-        pendingMaterials,
+        pendingParts,
+        pendingFuel,
         pendingRD,
         activeCards,
         resolvedCards,
@@ -149,13 +150,29 @@ export function gameReducer(
       }
     }
 
-    case 'COLLECT_MATERIALS': {
-      if (state.pendingMaterials <= 0) return state
+    case 'COLLECT_PARTS': {
+      if (state.pendingParts <= 0) return state
       return {
         ...state,
-        resources: applyDelta(state.resources, { materials: state.pendingMaterials }),
-        pendingMaterials: 0,
+        resources: applyDelta(state.resources, { parts: state.pendingParts }),
+        pendingParts: 0,
       }
+    }
+
+    case 'COLLECT_FUEL': {
+      if (state.pendingFuel <= 0) return state
+      return {
+        ...state,
+        resources: applyDelta(state.resources, { fuel: state.pendingFuel }),
+        pendingFuel: 0,
+      }
+    }
+
+    case 'PROCURE_MATERIAL': {
+      const def = content.procurement.find((p) => p.materialType === action.materialType)
+      if (!def) return state
+      if (!canProcure(state.resources, def)) return state
+      return { ...state, resources: procure(state.resources, def) }
     }
 
     case 'COLLECT_RD': {

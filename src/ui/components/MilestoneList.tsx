@@ -1,15 +1,9 @@
 import { useState } from 'react'
 import { MILESTONES, TECH_TREE } from '../../content'
 import { canAfford } from '../../simulation'
-import type { Astronaut, MilestoneMissionDef, ResourceDelta } from '../../simulation'
+import type { Astronaut, MilestoneMissionDef } from '../../simulation'
+import { formatCost } from '../formatCost'
 import { useGame } from '../useGame'
-
-function formatCost(cost: ResourceDelta): string {
-  const parts: string[] = []
-  if (cost.budget) parts.push(`$${Math.abs(cost.budget).toLocaleString()} budget`)
-  if (cost.materials) parts.push(`${Math.abs(cost.materials)} materials`)
-  return parts.join(', ')
-}
 
 export function MilestoneList() {
   return (
@@ -70,7 +64,7 @@ function MilestoneCard({ mission }: { mission: MilestoneMissionDef }) {
       <p className="mt-1 text-sm text-slate-400">{mission.description}</p>
       <p className="mt-2 text-xs text-slate-500">Launch cost: {formatCost(mission.cost)}</p>
       {!affordable && (
-        <p className="mt-1 text-xs text-amber-400">Not enough budget/materials yet — collect and hold more.</p>
+        <p className="mt-1 text-xs text-amber-400">Not enough on hand yet — collect, procure, or hold more.</p>
       )}
       {progress?.succeeded === false && (
         <p className="mt-2 text-xs text-rose-400">Last attempt failed — the program can try again.</p>

@@ -117,12 +117,12 @@ const STATION_EVALUATORS: Record<string, StationEvaluator> = {
     // A strong engineering astronaut helps catch integration issues early.
     const engineering = effectiveSkills(astronaut, unlockedTech).engineering
     const engineeringBonus = engineering > 70 ? 0.1 : 0
-    const isGo = state.resources.materials >= cost || rng() > (0.3 - engineeringBonus) * multiplier
+    const isGo = state.resources.payload >= cost || rng() > (0.3 - engineeringBonus) * multiplier
     return {
       isGo,
       reasoning: isGo
         ? 'Payload integration complete and verified.'
-        : 'Payload integration is behind schedule on hardware stores.',
+        : 'Payload integration is behind schedule — not enough payload stock on hand.',
     }
   },
 }

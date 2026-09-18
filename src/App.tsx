@@ -5,6 +5,7 @@ import { ClockControl } from './ui/components/ClockControl'
 import { DecisionCardModal } from './ui/components/DecisionCardModal'
 import { HeadlineFeed } from './ui/components/HeadlineFeed'
 import { LaunchSequenceModal } from './ui/components/LaunchSequenceModal'
+import { MaterialsPanel } from './ui/components/MaterialsPanel'
 import { MilestoneList } from './ui/components/MilestoneList'
 import { ResourceBar } from './ui/components/ResourceBar'
 import { SiteTours } from './ui/components/SiteTours'
@@ -46,6 +47,7 @@ function AppShell() {
 
       <main className="flex flex-1 flex-col gap-4 px-4 py-4">
         <MilestoneList />
+        <MaterialsPanel />
         <SiteTours />
         <TechTree />
         <AstronautRoster />

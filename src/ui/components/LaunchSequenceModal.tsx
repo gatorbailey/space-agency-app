@@ -99,7 +99,7 @@ export function LaunchSequenceModal() {
 
             {!affordable && (
               <p className="mt-3 text-xs text-amber-400">
-                Not enough budget/materials to cover the launch cost — scrub and collect more first.
+                Not enough on hand to cover the launch cost — scrub and collect or procure more first.
               </p>
             )}
 

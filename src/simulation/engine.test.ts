@@ -73,8 +73,25 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
     ],
     techTree: [],
     tours: [],
-    facility: { materialsPerDay: 5, materialsStorageCap: 20, rdPerDay: 2, rdStorageCap: 10 },
-    startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70, rd: 0 },
+    procurement: [
+      { materialType: 'parts', budgetCost: 150, amount: 10 },
+      { materialType: 'fuel', budgetCost: 120, amount: 10 },
+      { materialType: 'payload', budgetCost: 300, amount: 5 },
+      { materialType: 'safetyGear', budgetCost: 200, amount: 5 },
+      { materialType: 'provisions', budgetCost: 100, amount: 10 },
+    ],
+    facility: { partsPerDay: 5, partsStorageCap: 20, fuelPerDay: 3, fuelStorageCap: 15, rdPerDay: 2, rdStorageCap: 10 },
+    startingResources: {
+      sentiment: 50,
+      budget: 1000,
+      crewReadiness: 70,
+      rd: 0,
+      parts: 10,
+      fuel: 10,
+      payload: 10,
+      safetyGear: 10,
+      provisions: 10,
+    },
     astronautPool: [testAstronaut, reserveAstronaut],
     initialActiveIds: ['test-astronaut'],
     activeRosterCap: 1,
@@ -111,24 +128,71 @@ describe('clock', () => {
 })
 
 describe('materials accrual', () => {
-  it('accrues into a pending buffer capped by facility storage, not into resources directly', () => {
+  it('Parts accrue into a pending buffer capped by facility storage, not into resources directly', () => {
     const content = makeContent()
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
     for (let i = 0; i < 10; i++) {
       state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
     }
-    expect(state.pendingMaterials).toBe(20) // capped at materialsStorageCap
-    expect(state.resources.materials).toBe(10) // unchanged until collected
+    expect(state.pendingParts).toBe(20) // capped at partsStorageCap
+    expect(state.resources.parts).toBe(10) // unchanged until collected
   })
 
-  it('COLLECT_MATERIALS moves the pending buffer into resources', () => {
+  it('Fuel accrues into its own pending buffer the same way', () => {
     const content = makeContent()
     let state = createInitialState(content)
-    state = { ...state, pendingMaterials: 15 }
-    state = gameReducer(state, { type: 'COLLECT_MATERIALS' }, content, alwaysGo)
-    expect(state.resources.materials).toBe(25)
-    expect(state.pendingMaterials).toBe(0)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 10; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.pendingFuel).toBe(15) // capped at fuelStorageCap
+    expect(state.resources.fuel).toBe(10) // unchanged until collected
+  })
+
+  it('COLLECT_PARTS moves the pending buffer into resources', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = { ...state, pendingParts: 15 }
+    state = gameReducer(state, { type: 'COLLECT_PARTS' }, content, alwaysGo)
+    expect(state.resources.parts).toBe(25)
+    expect(state.pendingParts).toBe(0)
+  })
+
+  it('COLLECT_FUEL moves the pending buffer into resources', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = { ...state, pendingFuel: 8 }
+    state = gameReducer(state, { type: 'COLLECT_FUEL' }, content, alwaysGo)
+    expect(state.resources.fuel).toBe(18)
+    expect(state.pendingFuel).toBe(0)
+  })
+
+  it('PROCURE_MATERIAL spends budget for an immediate batch of any material type', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'PROCURE_MATERIAL', materialType: 'payload' }, content, alwaysGo)
+    expect(state.resources.payload).toBe(15) // 10 + 5
+    expect(state.resources.budget).toBe(700) // 1000 - 300
+  })
+
+  it('PROCURE_MATERIAL is blocked when unaffordable, leaving state untouched', () => {
+    const content = makeContent({
+      startingResources: {
+        sentiment: 50,
+        budget: 50,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
+    })
+    const state = createInitialState(content)
+    const next = gameReducer(state, { type: 'PROCURE_MATERIAL', materialType: 'payload' }, content, alwaysGo)
+    expect(next).toBe(state)
   })
 })
 
@@ -277,7 +341,7 @@ describe('launch cost', () => {
           name: 'Test Milestone',
           description: 'A test milestone',
           plan: { payloadType: 'research', riskThreshold: 20 },
-          cost: { budget: -500, materials: -5 },
+          cost: { budget: -500, parts: -5 },
           successEffects: { sentiment: 10 },
           failureEffects: { sentiment: -10 },
         },
@@ -289,12 +353,22 @@ describe('launch cost', () => {
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
     expect(state.resources.budget).toBe(500) // 1000 - 500
-    expect(state.resources.materials).toBe(5) // 10 - 5
+    expect(state.resources.parts).toBe(5) // 10 - 5
   })
 
   it('blocks COMMIT_LAUNCH when the mission cost cannot be afforded, leaving resources untouched', () => {
     const content = makeContent({
-      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70, rd: 0 },
+      startingResources: {
+        sentiment: 50,
+        budget: 100,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
       milestones: [
         {
           id: 'test-milestone',
@@ -541,7 +615,7 @@ describe('tech tree', () => {
     expect(next).toBe(state)
   })
 
-  it('Materials Science raises the daily materials accrual rate once researched', () => {
+  it('Materials Science raises the daily Parts accrual rate once researched', () => {
     const content = makeContent({
       techTree: [
         { id: TECH_IDS.materialsScience, name: 'Materials Science', description: '', category: 'knowledge', cost: {} },
@@ -550,11 +624,11 @@ describe('tech tree', () => {
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 100, budget: 100000 } }
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.materialsScience }, content, alwaysGo)
-    expect(state.facility.materialsPerDay).toBe(9) // base 5/day + 4 bonus, applied once at research
+    expect(state.facility.partsPerDay).toBe(9) // base 5/day + 4 bonus, applied once at research
 
     state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
     state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
-    expect(state.pendingMaterials).toBe(9)
+    expect(state.pendingParts).toBe(9)
   })
 
   it('Life Support halves the crew-readiness penalty on a failed mission', () => {
@@ -655,7 +729,7 @@ describe('tech tree', () => {
 })
 
 describe('infrastructure tech tree', () => {
-  it('Fueling Depot Tier raises the materials storage cap once researched', () => {
+  it('Fueling Depot Tier raises the fuel storage cap once researched', () => {
     const content = makeContent({
       techTree: [
         { id: TECH_IDS.fuelingDepotTier, name: 'Fueling Depot', description: '', category: 'infrastructure', cost: {} },
@@ -663,7 +737,7 @@ describe('infrastructure tech tree', () => {
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.fuelingDepotTier }, content, alwaysGo)
-    expect(state.facility.materialsStorageCap).toBe(40) // base 20 + 20 bonus
+    expect(state.facility.fuelStorageCap).toBe(35) // base 15 + 20 bonus
   })
 
   it('R&D Lab Tier raises the R&D generation rate once researched', () => {
@@ -939,7 +1013,17 @@ describe('site tours', () => {
   it('is blocked when the cost cannot be afforded', () => {
     const content = makeContent({
       tours: [testVipTour],
-      startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70, rd: 0 },
+      startingResources: {
+        sentiment: 50,
+        budget: 100,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
     })
     const state = createInitialState(content)
     const next = gameReducer(state, { type: 'HOST_TOUR', tourType: 'vip' }, content, alwaysGo)
@@ -949,7 +1033,17 @@ describe('site tours', () => {
   it('VIP tours can grant a bonus budget windfall on a clean success', () => {
     const content = makeContent({
       tours: [testVipTour],
-      startingResources: { sentiment: 50, budget: 10000, materials: 10, crewReadiness: 70, rd: 0 },
+      startingResources: {
+        sentiment: 50,
+        budget: 10000,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
     })
     let state = createInitialState(content)
     // mishap check (0.5 < 0.3 false -> success), bonus check (0.1 < 0.3 true -> bonus), flavor pick
@@ -961,7 +1055,17 @@ describe('site tours', () => {
   it('VIP tours do not grant the bonus when the roll misses it', () => {
     const content = makeContent({
       tours: [testVipTour],
-      startingResources: { sentiment: 50, budget: 10000, materials: 10, crewReadiness: 70, rd: 0 },
+      startingResources: {
+        sentiment: 50,
+        budget: 10000,
+        crewReadiness: 70,
+        rd: 0,
+        parts: 10,
+        fuel: 10,
+        payload: 10,
+        safetyGear: 10,
+        provisions: 10,
+      },
     })
     let state = createInitialState(content)
     // mishap check (0.5 < 0.3 false -> success), bonus check (0.5 < 0.3 false -> no bonus), flavor pick
