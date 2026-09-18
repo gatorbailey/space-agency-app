@@ -5,7 +5,7 @@ import { ClockControl } from './ui/components/ClockControl'
 import { DecisionCardModal } from './ui/components/DecisionCardModal'
 import { HeadlineFeed } from './ui/components/HeadlineFeed'
 import { LaunchSequenceModal } from './ui/components/LaunchSequenceModal'
-import { MilestonePanel } from './ui/components/MilestonePanel'
+import { MilestoneList } from './ui/components/MilestoneList'
 import { ResourceBar } from './ui/components/ResourceBar'
 import { StatusMenu } from './ui/components/StatusMenu'
 import { GameProvider } from './ui/GameContext'
@@ -43,7 +43,7 @@ function AppShell() {
       </header>
 
       <main className="flex flex-1 flex-col gap-4 px-4 py-4">
-        <MilestonePanel />
+        <MilestoneList />
         <AstronautRoster />
       </main>
 

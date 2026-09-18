@@ -134,6 +134,8 @@ export interface MilestoneMissionDef {
   /** Applied on top of the computed launch outcome. */
   successEffects: ResourceDelta
   failureEffects: ResourceDelta
+  /** Must be resolved (succeeded) before this mission can be attempted. */
+  prerequisiteMissionId?: string
 }
 
 export interface MilestoneState {
@@ -156,7 +158,8 @@ export interface GameState {
   resolvedCards: Record<string, number>
   launch: LaunchSequenceState | null
   headlines: Headline[]
-  milestone: MilestoneState
+  /** Keyed by mission id — one entry per mission in content.milestones. */
+  milestones: Record<string, MilestoneState>
   roster: RosterState
 }
 
@@ -193,7 +196,8 @@ export interface GameContent {
   cardPool: DecisionCardDef[]
   stations: GoNoGoStationDef[]
   weatherProfile: SiteWeatherProfile
-  milestone: MilestoneMissionDef
+  /** Ordered chain of missions; a mission with a prerequisiteMissionId unlocks after it. */
+  milestones: MilestoneMissionDef[]
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]

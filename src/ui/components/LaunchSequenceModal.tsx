@@ -1,4 +1,4 @@
-import { GO_NO_GO_STATIONS, MILESTONE } from '../../content'
+import { GO_NO_GO_STATIONS, MILESTONES } from '../../content'
 import { canAfford } from '../../simulation'
 import { useGame } from '../useGame'
 
@@ -7,14 +7,15 @@ export function LaunchSequenceModal() {
   const launch = state.launch
   if (!launch) return null
 
+  const mission = MILESTONES.find((m) => m.id === launch.missionId)
   const blockedByStations = launch.stations.some((s) => !s.isGo && !s.overridden)
-  const affordable = canAfford(state.resources, MILESTONE.cost)
+  const affordable = mission ? canAfford(state.resources, mission.cost) : false
   const crew = state.roster.astronauts.find((a) => a.id === launch.astronautId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        <h2 className="text-lg font-bold text-slate-100">Launch Sequence</h2>
+        <h2 className="text-lg font-bold text-slate-100">Launch Sequence — {mission?.name}</h2>
         <p className="mt-0.5 text-xs text-slate-500">Crew: {crew?.lastName ?? 'Unassigned'}</p>
         <StageIndicator stage={launch.stage} />
 

@@ -40,15 +40,17 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
       { id: 'weather', name: 'Weather', officer: 'Lt. Test' },
     ],
     weatherProfile: { meanTempF: 70, stdDevTempF: 10, safeThresholdF: 40 },
-    milestone: {
-      id: 'test-milestone',
-      name: 'Test Milestone',
-      description: 'A test milestone',
-      plan: { payloadType: 'research', riskThreshold: 20 },
-      cost: {},
-      successEffects: { sentiment: 10 },
-      failureEffects: { sentiment: -10 },
-    },
+    milestones: [
+      {
+        id: 'test-milestone',
+        name: 'Test Milestone',
+        description: 'A test milestone',
+        plan: { payloadType: 'research', riskThreshold: 20 },
+        cost: {},
+        successEffects: { sentiment: 10 },
+        failureEffects: { sentiment: -10 },
+      },
+    ],
     facility: { materialsPerDay: 5, materialsStorageCap: 20 },
     startingResources: { sentiment: 50, budget: 1000, materials: 10, crewReadiness: 70 },
     astronautPool: [testAstronaut, reserveAstronaut],
@@ -186,7 +188,7 @@ describe('launch sequence', () => {
     expect(state.launch?.stage).toBe('outcome')
     expect(state.launch?.outcome).toBe('success')
     expect(state.resources.sentiment).toBe(60)
-    expect(state.milestone.resolved).toBe(true)
+    expect(state.milestones['test-milestone'].resolved).toBe(true)
     expect(state.headlines).toHaveLength(2)
 
     state = gameReducer(state, { type: 'ACKNOWLEDGE_OUTCOME' }, content, alwaysGo)
@@ -240,15 +242,17 @@ describe('launch sequence', () => {
 describe('launch cost', () => {
   it('deducts the mission cost from resources on a successful commit', () => {
     const content = makeContent({
-      milestone: {
-        id: 'test-milestone',
-        name: 'Test Milestone',
-        description: 'A test milestone',
-        plan: { payloadType: 'research', riskThreshold: 20 },
-        cost: { budget: -500, materials: -5 },
-        successEffects: { sentiment: 10 },
-        failureEffects: { sentiment: -10 },
-      },
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test Milestone',
+          description: 'A test milestone',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: { budget: -500, materials: -5 },
+          successEffects: { sentiment: 10 },
+          failureEffects: { sentiment: -10 },
+        },
+      ],
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
@@ -262,15 +266,17 @@ describe('launch cost', () => {
   it('blocks COMMIT_LAUNCH when the mission cost cannot be afforded, leaving resources untouched', () => {
     const content = makeContent({
       startingResources: { sentiment: 50, budget: 100, materials: 10, crewReadiness: 70 },
-      milestone: {
-        id: 'test-milestone',
-        name: 'Test Milestone',
-        description: 'A test milestone',
-        plan: { payloadType: 'research', riskThreshold: 20 },
-        cost: { budget: -500 },
-        successEffects: { sentiment: 10 },
-        failureEffects: { sentiment: -10 },
-      },
+      milestones: [
+        {
+          id: 'test-milestone',
+          name: 'Test Milestone',
+          description: 'A test milestone',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: { budget: -500 },
+          successEffects: { sentiment: 10 },
+          failureEffects: { sentiment: -10 },
+        },
+      ],
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
@@ -364,5 +370,91 @@ describe('astronaut roster', () => {
     expect(state.launch?.outcome).toBe('success')
     expect(state.launch?.astronautLost).toBe(false)
     expect(state.roster.astronauts.find((a) => a.id === 'test-astronaut')?.status).toBe('active')
+  })
+})
+
+describe('milestone chain', () => {
+  const chainedContent = () =>
+    makeContent({
+      milestones: [
+        {
+          id: 'mission-a',
+          name: 'Mission A',
+          description: 'First in the chain',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: {},
+          successEffects: { sentiment: 5 },
+          failureEffects: { sentiment: -5 },
+        },
+        {
+          id: 'mission-b',
+          name: 'Mission B',
+          description: 'Second in the chain',
+          plan: { payloadType: 'research', riskThreshold: 20 },
+          cost: {},
+          successEffects: { sentiment: 5 },
+          failureEffects: { sentiment: -5 },
+          prerequisiteMissionId: 'mission-a',
+        },
+      ],
+    })
+
+  it('refuses to start a mission whose prerequisite has not succeeded', () => {
+    const content = chainedContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'mission-b', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch).toBeNull()
+  })
+
+  it('unlocks the next mission once the prerequisite succeeds', () => {
+    const content = chainedContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'mission-a', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    expect(state.milestones['mission-a'].resolved).toBe(true)
+    state = gameReducer(state, { type: 'ACKNOWLEDGE_OUTCOME' }, content, alwaysGo)
+
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'mission-b', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch?.missionId).toBe('mission-b')
+  })
+
+  it('refuses to restart a mission that has already succeeded', () => {
+    const content = chainedContent()
+    let state = createInitialState(content)
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'mission-a', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'ACKNOWLEDGE_OUTCOME' }, content, alwaysGo)
+
+    state = gameReducer(
+      state,
+      { type: 'START_LAUNCH', missionId: 'mission-a', astronautId: 'test-astronaut' },
+      content,
+      alwaysGo,
+    )
+    expect(state.launch).toBeNull()
   })
 })

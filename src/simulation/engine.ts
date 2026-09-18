@@ -26,7 +26,9 @@ export function createInitialState(content: GameContent): GameState {
     resolvedCards: {},
     launch: null,
     headlines: [],
-    milestone: { missionId: content.milestone.id, resolved: false, succeeded: null },
+    milestones: Object.fromEntries(
+      content.milestones.map((m) => [m.id, { missionId: m.id, resolved: false, succeeded: null }]),
+    ),
     roster: {
       activeCap: content.activeRosterCap,
       astronauts: content.astronautPool.map((def) => ({
@@ -107,8 +109,14 @@ export function gameReducer(
 
     case 'START_LAUNCH': {
       if (state.launch) return state
-      if (content.milestone.id !== action.missionId) return state
-      if (state.milestone.resolved) return state
+      const mission = content.milestones.find((m) => m.id === action.missionId)
+      if (!mission) return state
+      const progress = state.milestones[mission.id]
+      if (!progress || progress.resolved) return state
+      if (mission.prerequisiteMissionId) {
+        const prereq = state.milestones[mission.prerequisiteMissionId]
+        if (!prereq || !prereq.resolved) return state
+      }
       const astronaut = findAstronaut(state.roster, action.astronautId)
       if (!astronaut || astronaut.status !== 'active') return state
       return {
@@ -116,8 +124,8 @@ export function gameReducer(
         isHardPaused: true,
         speed: 'paused',
         launch: {
-          missionId: content.milestone.id,
-          plan: content.milestone.plan,
+          missionId: mission.id,
+          plan: mission.plan,
           astronautId: astronaut.id,
           stage: 'weather',
           weather: null,
@@ -169,7 +177,8 @@ export function gameReducer(
       if (!launch || launch.stage !== 'go-no-go' || !launch.weather) return state
       const blocked = launch.stations.some((s) => !s.isGo && !s.overridden)
       if (blocked) return state
-      const mission = content.milestone
+      const mission = content.milestones.find((m) => m.id === launch.missionId)
+      if (!mission) return state
       if (!canAfford(state.resources, mission.cost)) return state
       const astronaut = findAstronaut(state.roster, launch.astronautId)
       if (!astronaut) return state
@@ -198,19 +207,20 @@ export function gameReducer(
         astronautLost ? astronaut.lastName : null,
       )
 
+      const priorProgress = state.milestones[mission.id]
       return {
         ...state,
         resources,
         roster,
         headlines: [...state.headlines, ...headlines],
-        milestone:
-          state.milestone.missionId === mission.id
-            ? {
-                ...state.milestone,
-                resolved: outcome === 'success' ? true : state.milestone.resolved,
-                succeeded: outcome === 'success',
-              }
-            : state.milestone,
+        milestones: {
+          ...state.milestones,
+          [mission.id]: {
+            ...priorProgress,
+            resolved: outcome === 'success' ? true : priorProgress.resolved,
+            succeeded: outcome === 'success',
+          },
+        },
         launch: { ...launch, stage: 'outcome', outcome, astronautLost },
       }
     }
