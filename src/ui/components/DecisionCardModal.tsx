@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { CARD_POOL } from '../../content'
+import { DEPARTMENT_LABELS } from '../departmentLabels'
 import { useGame } from '../useGame'
 
 interface DecisionCardModalProps {
@@ -10,11 +12,22 @@ interface DecisionCardModalProps {
 }
 
 export function DecisionCardModal({ cardId, dismissible, onClose }: DecisionCardModalProps) {
-  const { dispatch } = useGame()
-  if (!cardId) return null
+  const { state, dispatch } = useGame()
+  const active = cardId ? state.activeCards.find((c) => c.cardId === cardId) : undefined
+
+  // The clock keeps running for 'flag' cards, so one can expire and
+  // auto-resolve while its detail view is still open — close it rather than
+  // leave a stale, now-inert card on screen.
+  useEffect(() => {
+    if (cardId && !active) onClose()
+  }, [cardId, active, onClose])
+
+  if (!cardId || !active) return null
 
   const card = CARD_POOL.find((c) => c.id === cardId)
   if (!card) return null
+
+  const daysLeft = card.deadlineDays !== undefined ? card.deadlineDays - (state.day - active.drawnOnDay) : null
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
@@ -22,7 +35,15 @@ export function DecisionCardModal({ cardId, dismissible, onClose }: DecisionCard
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-slate-100">{card.title}</h2>
-            <p className="mt-0.5 text-xs text-slate-500">{card.site}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {DEPARTMENT_LABELS[card.department]} · {card.site}
+              {daysLeft !== null && (
+                <span className={daysLeft <= 2 ? 'text-rose-400' : 'text-amber-400'}>
+                  {' '}
+                  · {daysLeft <= 0 ? 'due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}
+                </span>
+              )}
+            </p>
           </div>
           {dismissible && (
             <button

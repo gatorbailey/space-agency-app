@@ -36,6 +36,10 @@ export interface DecisionOption {
   effects: ResourceDelta
 }
 
+/** Which desk a card is tagged to in the status menu — future home for map/building grouping. */
+export const CARD_DEPARTMENTS = ['press', 'astronaut-corps', 'infrastructure', 'budget', 'personnel'] as const
+export type CardDepartment = (typeof CARD_DEPARTMENTS)[number]
+
 export interface DecisionCardDef {
   id: string
   title: string
@@ -43,10 +47,20 @@ export interface DecisionCardDef {
   severity: Severity
   /** Which site this item is tagged to in the status menu (MVP has one). */
   site: string
+  /** Which desk handles this — groups the status menu and will map to buildings later. */
+  department: CardDepartment
   /** Earliest sim day this card is eligible to be drawn. */
   availableFromDay: number
   /** Minimum sim-days after resolution before this card can be drawn again. */
   cooldownDays: number
+  /**
+   * If set, an unanswered card auto-resolves via onExpireOptionId after this
+   * many days — some administrative business doesn't wait. Omit for a card
+   * that can sit in the queue indefinitely.
+   */
+  deadlineDays?: number
+  /** Required alongside deadlineDays: which option id applies automatically on expiry. */
+  onExpireOptionId?: string
   options: DecisionOption[]
 }
 
@@ -215,6 +229,14 @@ export interface GameState {
   /** Sim day each tour type was last hosted, for cooldown gating. */
   lastTourDay: Partial<Record<TourType, number>>
   lastTourOutcome: TourOutcome | null
+  /** Most recent card that expired unanswered and auto-resolved. */
+  lastExpiredCard: ExpiredCard | null
+}
+
+export interface ExpiredCard {
+  cardId: string
+  day: number
+  optionId: string
 }
 
 export type GameAction =

@@ -5,7 +5,8 @@ import { SITE_NAME } from './site'
  * Hand-authored set of Mercury-era decision cards. Every card is severity
  * 'flag' — it queues in the status menu without stopping the clock. Cards
  * recur after `cooldownDays` so the pool doesn't run dry over a long
- * campaign.
+ * campaign. About half carry a `deadlineDays` — the rest can sit in the
+ * queue indefinitely.
  */
 export const CARD_POOL: DecisionCardDef[] = [
   {
@@ -15,8 +16,11 @@ export const CARD_POOL: DecisionCardDef[] = [
       'A subcommittee wants testimony on program spending before the next appropriation. How do you play it?',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'budget',
     availableFromDay: 3,
     cooldownDays: 30,
+    deadlineDays: 10,
+    onExpireOptionId: 'cautious',
     options: [
       {
         id: 'confident',
@@ -38,6 +42,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'The booster fabrication contractor is behind schedule on a critical structural component.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 6,
     cooldownDays: 25,
     options: [
@@ -61,8 +66,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A glossy national magazine wants exclusive access to the program for a feature spread.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'press',
     availableFromDay: 10,
     cooldownDays: 25,
+    deadlineDays: 6,
+    onExpireOptionId: 'decline',
     options: [
       {
         id: 'grant-access',
@@ -84,6 +92,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A visiting tour group wandered too close to the gantry. Someone spilled coffee on a console.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'press',
     availableFromDay: 14,
     cooldownDays: 20,
     options: [
@@ -107,6 +116,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Rough seas held up the materials barge for three days.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 18,
     cooldownDays: 22,
     options: [
@@ -130,8 +140,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A review board has requested full access to inspect hardware and paperwork.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 22,
     cooldownDays: 30,
+    deadlineDays: 8,
+    onExpireOptionId: 'limit-access',
     options: [
       {
         id: 'welcome-scrutiny',
@@ -153,8 +166,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Technicians and pad crew are pushing for better shift conditions ahead of a busy stretch.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'personnel',
     availableFromDay: 26,
     cooldownDays: 35,
+    deadlineDays: 8,
+    onExpireOptionId: 'hold-firm',
     options: [
       {
         id: 'meet-demands',
@@ -176,8 +192,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Personnel wants a bigger budget for the next round of ground-crew recruiting.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'personnel',
     availableFromDay: 30,
     cooldownDays: 30,
+    deadlineDays: 10,
+    onExpireOptionId: 'trim-it',
     options: [
       {
         id: 'fund-it',
@@ -199,6 +218,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A depot is auctioning off a lot of aerospace-grade surplus hardware.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 34,
     cooldownDays: 28,
     options: [
@@ -222,8 +242,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A visiting head of state has requested an unscheduled tour of the facility.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'press',
     availableFromDay: 38,
     cooldownDays: 30,
+    deadlineDays: 5,
+    onExpireOptionId: 'standard-tour',
     options: [
       {
         id: 'red-carpet',
@@ -245,8 +268,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A widely syndicated cartoon pokes fun at a recent delay.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'press',
     availableFromDay: 42,
     cooldownDays: 24,
+    deadlineDays: 4,
+    onExpireOptionId: 'ignore-it',
     options: [
       {
         id: 'respond-publicly',
@@ -268,6 +294,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A prolonged heatwave is straining cooling systems and outdoor material stores.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 46,
     cooldownDays: 26,
     options: [
@@ -291,8 +318,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'News breaks that the rival program reached a milestone first. The press wants a reaction.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'press',
     availableFromDay: 50,
     cooldownDays: 32,
+    deadlineDays: 6,
+    onExpireOptionId: 'downplay-it',
     options: [
       {
         id: 'rally-the-public',
@@ -314,6 +344,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A simulator run goes wrong — no injuries, but a real scare on the training floor.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'astronaut-corps',
     availableFromDay: 54,
     cooldownDays: 28,
     options: [
@@ -337,8 +368,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A civic group wants one of the active roster for a high-visibility appearance.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'astronaut-corps',
     availableFromDay: 58,
     cooldownDays: 26,
+    deadlineDays: 5,
+    onExpireOptionId: 'decline',
     options: [
       {
         id: 'send-them',
@@ -360,8 +394,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'The flight surgeon recommends a mandatory rest period for ground crew ahead of the next push.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'astronaut-corps',
     availableFromDay: 62,
     cooldownDays: 30,
+    deadlineDays: 5,
+    onExpireOptionId: 'push-through',
     options: [
       {
         id: 'grant-rest',
@@ -383,6 +420,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Ground support equipment is showing its age. Deferred maintenance is starting to add up.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 66,
     cooldownDays: 34,
     options: [
@@ -406,6 +444,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A reallocated federal fund lands in the program’s lap ahead of schedule.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'budget',
     availableFromDay: 70,
     cooldownDays: 40,
     options: [
@@ -429,6 +468,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Security reports someone photographing the fence line before slipping away.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 74,
     cooldownDays: 36,
     options: [
@@ -452,6 +492,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'The site meteorologist wants budget for a better weather radar system.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 78,
     cooldownDays: 30,
     options: [
@@ -475,8 +516,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A technician’s suggestion-box idea turns out to be a genuine efficiency win.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'personnel',
     availableFromDay: 82,
     cooldownDays: 28,
+    deadlineDays: 9,
+    onExpireOptionId: 'file-it-away',
     options: [
       {
         id: 'adopt-it',
@@ -498,8 +542,11 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A delegation from the appropriations committee wants a firsthand look at the program.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'budget',
     availableFromDay: 86,
     cooldownDays: 34,
+    deadlineDays: 7,
+    onExpireOptionId: 'standard-briefing',
     options: [
       {
         id: 'full-vip-treatment',
@@ -521,6 +568,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'A national museum wants a retired test article for permanent display.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'infrastructure',
     availableFromDay: 90,
     cooldownDays: 30,
     options: [
@@ -544,6 +592,7 @@ export const CARD_POOL: DecisionCardDef[] = [
     description: 'Pushing to stay on schedule is burning through the overtime budget fast.',
     severity: 'flag',
     site: SITE_NAME,
+    department: 'personnel',
     availableFromDay: 94,
     cooldownDays: 24,
     options: [

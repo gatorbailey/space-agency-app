@@ -77,6 +77,7 @@ export function createInitialState(content: GameContent): GameState {
     },
     lastTourDay: {},
     lastTourOutcome: null,
+    lastExpiredCard: null,
   }
 }
 
@@ -101,14 +102,30 @@ export function gameReducer(
       )
       const pendingRD = Math.min(state.facility.rdStorageCap, state.pendingRD + state.facility.rdPerDay)
 
+      // Unanswered cards past their deadline auto-resolve via onExpireOptionId
+      // — some administrative business doesn't wait for the player.
       let activeCards = state.activeCards
+      let resolvedCards = state.resolvedCards
+      let resources = state.resources
+      let lastExpiredCard = state.lastExpiredCard
+      for (const active of state.activeCards) {
+        const card = content.cardPool.find((c) => c.id === active.cardId)
+        if (!card || card.deadlineDays === undefined || card.onExpireOptionId === undefined) continue
+        if (day - active.drawnOnDay < card.deadlineDays) continue
+        const option = findOption(card, card.onExpireOptionId)
+        resources = applyDelta(resources, option.effects)
+        activeCards = activeCards.filter((c) => c.cardId !== active.cardId)
+        resolvedCards = { ...resolvedCards, [active.cardId]: day }
+        lastExpiredCard = { cardId: active.cardId, day, optionId: card.onExpireOptionId }
+      }
+
       let drawnCardSeverity: Severity | null = null
       if (rng() < CARD_DRAW_CHANCE_PER_DAY) {
         const card = pickEligibleCard(
           day,
           content.cardPool,
           activeCards.map((c) => c.cardId),
-          state.resolvedCards,
+          resolvedCards,
           rng,
         )
         if (card) {
@@ -123,6 +140,9 @@ export function gameReducer(
         pendingMaterials,
         pendingRD,
         activeCards,
+        resolvedCards,
+        resources,
+        lastExpiredCard,
         // 'flag' cards queue in the status menu without interrupting the
         // clock; only a 'pause' card (rare/urgent) stops time outright.
         speed: drawnCardSeverity === 'pause' ? 'paused' : state.speed,
@@ -163,6 +183,11 @@ export function gameReducer(
     }
 
     case 'RESOLVE_CARD': {
+      // Guards against a stale modal: the clock keeps running for 'flag'
+      // cards, so one can expire and auto-resolve while its detail view is
+      // still open. Without this check, clicking an option there would
+      // double-apply effects on top of the expiry outcome.
+      if (!state.activeCards.some((c) => c.cardId === action.cardId)) return state
       const card = content.cardPool.find((c) => c.id === action.cardId)
       if (!card) return state
       const option = findOption(card, action.optionId)

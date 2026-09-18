@@ -14,6 +14,7 @@ const testCard: DecisionCardDef = {
   description: 'A test card',
   severity: 'flag',
   site: 'Test Site',
+  department: 'infrastructure',
   availableFromDay: 0,
   cooldownDays: 5,
   options: [
@@ -28,9 +29,27 @@ const urgentCard: DecisionCardDef = {
   description: 'An urgent, pause-severity card',
   severity: 'pause',
   site: 'Test Site',
+  department: 'infrastructure',
   availableFromDay: 0,
   cooldownDays: 5,
   options: [{ id: 'a', label: 'A', description: '', effects: { sentiment: 5 } }],
+}
+
+const deadlineCard: DecisionCardDef = {
+  id: 'deadline-card',
+  title: 'Deadline Card',
+  description: 'A card with a deadline',
+  severity: 'flag',
+  site: 'Test Site',
+  department: 'press',
+  availableFromDay: 0,
+  cooldownDays: 20,
+  deadlineDays: 3,
+  onExpireOptionId: 'default',
+  options: [
+    { id: 'respond', label: 'Respond', description: '', effects: { sentiment: 5 } },
+    { id: 'default', label: 'Default', description: '', effects: { sentiment: -4 } },
+  ],
 }
 
 function makeContent(overrides: Partial<GameContent> = {}): GameContent {
@@ -151,6 +170,13 @@ describe('decision cards', () => {
     expect(state.resources.sentiment).toBe(55)
     expect(state.activeCards).toHaveLength(0)
     expect(state.resolvedCards['test-card']).toBe(0)
+  })
+
+  it('RESOLVE_CARD is a no-op for a card that is not currently active', () => {
+    const content = makeContent()
+    const state = createInitialState(content) // activeCards is empty
+    const next = gameReducer(state, { type: 'RESOLVE_CARD', cardId: 'test-card', optionId: 'a' }, content, alwaysGo)
+    expect(next).toBe(state)
   })
 
   it('does not redraw a resolved card until its cooldown elapses', () => {
@@ -942,5 +968,41 @@ describe('site tours', () => {
     state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'vip' }, content, rngSequence([0.5, 0.5, 0]))
     expect(state.resources.budget).toBe(10000 - 1500)
     expect(state.lastTourOutcome?.bonusBudget).toBe(false)
+  })
+})
+
+describe('card deadlines', () => {
+  it('an unanswered card past its deadline auto-resolves via onExpireOptionId', () => {
+    const content = makeContent({ cardPool: [deadlineCard] })
+    let state = createInitialState(content)
+    state = { ...state, activeCards: [{ cardId: 'deadline-card', drawnOnDay: 0 }] }
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+
+    // Days 1-2: still within the 3-day deadline.
+    for (let i = 0; i < 2; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.activeCards).toHaveLength(1)
+    expect(state.lastExpiredCard).toBeNull()
+
+    // Day 3: deadline reached, auto-resolves with the default option's effects.
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.activeCards).toHaveLength(0)
+    expect(state.resources.sentiment).toBe(46) // 50 - 4
+    expect(state.lastExpiredCard).toEqual({ cardId: 'deadline-card', day: 3, optionId: 'default' })
+    expect(state.resolvedCards['deadline-card']).toBe(3)
+  })
+
+  it('a card with no deadlineDays never auto-expires', () => {
+    const content = makeContent({ cardPool: [testCard] }) // testCard has no deadlineDays
+    let state = createInitialState(content)
+    state = { ...state, activeCards: [{ cardId: 'test-card', drawnOnDay: 0 }] }
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+
+    for (let i = 0; i < 30; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.activeCards.some((c) => c.cardId === 'test-card')).toBe(true)
+    expect(state.lastExpiredCard).toBeNull()
   })
 })
