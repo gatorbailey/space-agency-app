@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CARD_POOL } from './content'
 import { AstronautRoster } from './ui/components/AstronautRoster'
+import { BudgetOffice } from './ui/components/BudgetOffice'
 import { ClockControl } from './ui/components/ClockControl'
 import { DecisionCardModal } from './ui/components/DecisionCardModal'
 import { HeadlineFeed } from './ui/components/HeadlineFeed'
@@ -46,6 +47,7 @@ function AppShell() {
       </header>
 
       <main className="flex flex-1 flex-col gap-4 px-4 py-4">
+        <BudgetOffice />
         <MilestoneList />
         <MaterialsPanel />
         <SiteTours />
