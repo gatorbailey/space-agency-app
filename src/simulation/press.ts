@@ -5,6 +5,8 @@ export function generateHeadlines(
   missionName: string,
   outcome: 'success' | 'failure',
   day: number,
+  /** Count of headlines already recorded — keeps ids unique across repeat attempts on the same day. */
+  sequence: number,
 ): Headline[] {
   const supporterText =
     outcome === 'success'
@@ -16,7 +18,7 @@ export function generateHeadlines(
       : `Detractor Weekly: "${missionName} failure was entirely predictable."`
 
   return [
-    { id: `${missionId}-${day}-supporter`, outlet: 'Daily Supporter', text: supporterText, day },
-    { id: `${missionId}-${day}-detractor`, outlet: 'Detractor Weekly', text: detractorText, day },
+    { id: `${missionId}-${day}-${sequence}-supporter`, outlet: 'Daily Supporter', text: supporterText, day },
+    { id: `${missionId}-${day}-${sequence}-detractor`, outlet: 'Detractor Weekly', text: detractorText, day },
   ]
 }

@@ -3,9 +3,10 @@
 export type ClockSpeed = 'paused' | 'normal' | 'fast' | 'faster'
 
 /**
- * Every event/card carries a severity from day one. MVP has no status-menu
- * UI, so 'flag' is unused for now — all MVP cards resolve as 'pause' — but
- * the field exists to avoid a Phase 2 retrofit.
+ * Every event/card carries a severity. 'flag' cards queue in the status menu
+ * without interrupting the flowing clock; 'pause' is reserved for the rare
+ * card urgent enough to demand an immediate answer (distinct from the hard
+ * pause on a launch's go/no-go window, which isn't card-driven at all).
  */
 export type Severity = 'flag' | 'pause'
 
@@ -36,6 +37,8 @@ export interface DecisionCardDef {
   title: string
   description: string
   severity: Severity
+  /** Which site this item is tagged to in the status menu (MVP has one). */
+  site: string
   /** Earliest sim day this card is eligible to be drawn. */
   availableFromDay: number
   /** Minimum sim-days after resolution before this card can be drawn again. */

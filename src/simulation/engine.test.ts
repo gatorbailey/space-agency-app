@@ -1,23 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, gameReducer } from './engine'
-import type { GameContent } from './types'
+import type { DecisionCardDef, GameContent } from './types'
+
+const testCard: DecisionCardDef = {
+  id: 'test-card',
+  title: 'Test Card',
+  description: 'A test card',
+  severity: 'flag',
+  site: 'Test Site',
+  availableFromDay: 0,
+  cooldownDays: 5,
+  options: [
+    { id: 'a', label: 'A', description: '', effects: { sentiment: 5 } },
+    { id: 'b', label: 'B', description: '', effects: { budget: -100 } },
+  ],
+}
+
+const urgentCard: DecisionCardDef = {
+  id: 'urgent-card',
+  title: 'Urgent Card',
+  description: 'An urgent, pause-severity card',
+  severity: 'pause',
+  site: 'Test Site',
+  availableFromDay: 0,
+  cooldownDays: 5,
+  options: [{ id: 'a', label: 'A', description: '', effects: { sentiment: 5 } }],
+}
 
 function makeContent(overrides: Partial<GameContent> = {}): GameContent {
   return {
-    cardPool: [
-      {
-        id: 'test-card',
-        title: 'Test Card',
-        description: 'A test card',
-        severity: 'pause',
-        availableFromDay: 0,
-        cooldownDays: 5,
-        options: [
-          { id: 'a', label: 'A', description: '', effects: { sentiment: 5 } },
-          { id: 'b', label: 'B', description: '', effects: { budget: -100 } },
-        ],
-      },
-    ],
+    cardPool: [testCard],
     stations: [
       { id: 'propulsion', name: 'Propulsion', officer: 'Dir. Test' },
       { id: 'weather', name: 'Weather', officer: 'Lt. Test' },
@@ -89,14 +101,33 @@ describe('materials accrual', () => {
 })
 
 describe('decision cards', () => {
-  it('a drawn card pauses the flowing clock (MVP severity is always pause)', () => {
-    const content = makeContent()
+  it('a flagged card queues without pausing the flowing clock', () => {
+    const content = makeContent() // cardPool is [testCard], severity 'flag'
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
     // rng below CARD_DRAW_CHANCE_PER_DAY (0.35) so a card is drawn.
     state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
     expect(state.activeCards).toHaveLength(1)
+    expect(state.speed).toBe('normal')
+  })
+
+  it('an urgent (pause-severity) card stops the flowing clock', () => {
+    const content = makeContent({ cardPool: [urgentCard] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
+    expect(state.activeCards).toHaveLength(1)
     expect(state.speed).toBe('paused')
+  })
+
+  it('multiple flagged cards can stack simultaneously since the clock keeps running', () => {
+    const content = makeContent({ cardPool: [testCard, { ...urgentCard, id: 'test-card-2', severity: 'flag' }] })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
+    state = gameReducer(state, { type: 'TICK' }, content, () => 0.01)
+    expect(state.activeCards).toHaveLength(2)
+    expect(state.speed).toBe('normal')
   })
 
   it('RESOLVE_CARD applies the chosen option effects and retires the card', () => {

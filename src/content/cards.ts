@@ -1,9 +1,11 @@
 import type { DecisionCardDef } from '../simulation'
+import { SITE_NAME } from './site'
 
 /**
- * Hand-authored set of Mercury-era decision cards for the MVP. Every card is
- * severity 'pause' — MVP has no status-menu UI to flag softly. Cards recur
- * after `cooldownDays` so the pool doesn't run dry over a long campaign.
+ * Hand-authored set of Mercury-era decision cards. Every card is severity
+ * 'flag' — it queues in the status menu without stopping the clock. Cards
+ * recur after `cooldownDays` so the pool doesn't run dry over a long
+ * campaign.
  */
 export const CARD_POOL: DecisionCardDef[] = [
   {
@@ -11,7 +13,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     title: 'Congressional Budget Hearing',
     description:
       'A subcommittee wants testimony on program spending before the next appropriation. How do you play it?',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 3,
     cooldownDays: 30,
     options: [
@@ -33,7 +36,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'contractor-delay',
     title: 'Contractor Delivery Delay',
     description: 'The booster fabrication contractor is behind schedule on a critical structural component.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 6,
     cooldownDays: 25,
     options: [
@@ -55,7 +59,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'press-exclusive',
     title: 'Life-Style Magazine Exclusive',
     description: 'A glossy national magazine wants exclusive access to the program for a feature spread.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 10,
     cooldownDays: 25,
     options: [
@@ -77,7 +82,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'public-tour-mishap',
     title: 'Public Tour Mishap',
     description: 'A visiting tour group wandered too close to the gantry. Someone spilled coffee on a console.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 14,
     cooldownDays: 20,
     options: [
@@ -99,7 +105,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'weather-delay-supplies',
     title: 'Barge Delayed by Weather',
     description: 'Rough seas held up the materials barge for three days.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 18,
     cooldownDays: 22,
     options: [
@@ -121,7 +128,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'safety-inspection',
     title: 'Independent Safety Inspection',
     description: 'A review board has requested full access to inspect hardware and paperwork.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 22,
     cooldownDays: 30,
     options: [
@@ -143,7 +151,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'labor-dispute',
     title: 'Ground Crew Labor Dispute',
     description: 'Technicians and pad crew are pushing for better shift conditions ahead of a busy stretch.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 26,
     cooldownDays: 35,
     options: [
@@ -165,7 +174,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'recruiting-drive',
     title: 'Recruiting Drive Funding',
     description: 'Personnel wants a bigger budget for the next round of ground-crew recruiting.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 30,
     cooldownDays: 30,
     options: [
@@ -187,7 +197,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'surplus-parts',
     title: 'War-Surplus Parts Lot',
     description: 'A depot is auctioning off a lot of aerospace-grade surplus hardware.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 34,
     cooldownDays: 28,
     options: [
@@ -209,7 +220,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'dignitary-visit',
     title: 'Foreign Dignitary Visit',
     description: 'A visiting head of state has requested an unscheduled tour of the facility.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 38,
     cooldownDays: 30,
     options: [
@@ -231,7 +243,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'editorial-cartoon',
     title: 'Unflattering Editorial Cartoon',
     description: 'A widely syndicated cartoon pokes fun at a recent delay.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 42,
     cooldownDays: 24,
     options: [
@@ -253,7 +266,8 @@ export const CARD_POOL: DecisionCardDef[] = [
     id: 'heatwave',
     title: 'Summer Heatwave',
     description: 'A prolonged heatwave is straining cooling systems and outdoor material stores.',
-    severity: 'pause',
+    severity: 'flag',
+    site: SITE_NAME,
     availableFromDay: 46,
     cooldownDays: 26,
     options: [

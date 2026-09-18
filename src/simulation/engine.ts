@@ -2,7 +2,7 @@ import { findOption, pickEligibleCard } from './cards'
 import { evaluateStation, resolveOutcome, rollWeather } from './launch'
 import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
-import type { GameAction, GameContent, GameState, Rng } from './types'
+import type { GameAction, GameContent, GameState, Rng, Severity } from './types'
 
 const DEFAULT_RNG: Rng = Math.random
 
@@ -46,6 +46,7 @@ export function gameReducer(
       )
 
       let activeCards = state.activeCards
+      let drawnCardSeverity: Severity | null = null
       if (rng() < CARD_DRAW_CHANCE_PER_DAY) {
         const card = pickEligibleCard(
           day,
@@ -54,18 +55,20 @@ export function gameReducer(
           state.resolvedCards,
           rng,
         )
-        if (card) activeCards = [...activeCards, { cardId: card.id, drawnOnDay: day }]
+        if (card) {
+          activeCards = [...activeCards, { cardId: card.id, drawnOnDay: day }]
+          drawnCardSeverity = card.severity
+        }
       }
-      const cardWasDrawn = activeCards !== state.activeCards
 
       return {
         ...state,
         day,
         pendingMaterials,
         activeCards,
-        // MVP has no status-menu UI, so every card is severity 'pause' —
-        // a drawn card stops the flowing clock until the player resolves it.
-        speed: cardWasDrawn ? 'paused' : state.speed,
+        // 'flag' cards queue in the status menu without interrupting the
+        // clock; only a 'pause' card (rare/urgent) stops time outright.
+        speed: drawnCardSeverity === 'pause' ? 'paused' : state.speed,
       }
     }
 
@@ -151,7 +154,7 @@ export function gameReducer(
 
       const outcome = resolveOutcome(launch.weather, launch.stations, launch.plan, rng)
       const effects = outcome === 'success' ? mission.successEffects : mission.failureEffects
-      const headlines = generateHeadlines(mission.id, mission.name, outcome, state.day)
+      const headlines = generateHeadlines(mission.id, mission.name, outcome, state.day, state.headlines.length)
       const resources = applyDelta(applyDelta(state.resources, mission.cost), effects)
 
       return {
