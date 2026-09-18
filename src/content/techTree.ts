@@ -14,6 +14,7 @@ const KNOWLEDGE_TECH: TechNodeDef[] = [
       'Well-understood liquid-fuel propulsion. A cut-corner risk setting costs less margin than it used to.',
     category: 'knowledge',
     cost: { rd: -25, budget: -2000 },
+    researchDays: 14,
   },
   {
     id: TECH_IDS.lifeSupport,
@@ -21,6 +22,7 @@ const KNOWLEDGE_TECH: TechNodeDef[] = [
     description: 'Better environmental control and redundancy. A failed mission costs the crew less.',
     category: 'knowledge',
     cost: { rd: -25, budget: -2000 },
+    researchDays: 14,
   },
   {
     id: TECH_IDS.materialsScience,
@@ -28,6 +30,7 @@ const KNOWLEDGE_TECH: TechNodeDef[] = [
     description: 'Lighter, cheaper, more efficient components. Parts accrue faster at the facility.',
     category: 'knowledge',
     cost: { rd: -20, budget: -1500 },
+    researchDays: 10,
   },
   {
     id: TECH_IDS.avionicsComputing,
@@ -35,6 +38,7 @@ const KNOWLEDGE_TECH: TechNodeDef[] = [
     description: 'Better onboard and ground computing sharpens the weather forecast’s accuracy.',
     category: 'knowledge',
     cost: { rd: -20, budget: -1500 },
+    researchDays: 10,
   },
   {
     id: TECH_IDS.propulsionExotic,
@@ -43,6 +47,7 @@ const KNOWLEDGE_TECH: TechNodeDef[] = [
       'Nuclear-thermal propulsion, well beyond Chemical’s risk margins — but a program using it pays a real Sentiment tax regardless of how safe it actually is. Requires the R&D Lab tier.',
     category: 'knowledge',
     cost: { rd: -60, budget: -6000 },
+    researchDays: 30,
     requiresTechId: TECH_IDS.rdLabTier,
     bonusEffect: { sentiment: -8 },
   },
@@ -60,6 +65,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'A hardened launch pad and booster interface. Lowers Propulsion’s no-go odds.',
     category: 'infrastructure',
     cost: { budget: -3000, parts: -20 },
+    researchDays: 18,
   },
   {
     id: TECH_IDS.vabTier,
@@ -67,6 +73,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'A taller vehicle assembly building, required for the program’s larger, riskier missions.',
     category: 'infrastructure',
     cost: { budget: -5000, parts: -30 },
+    researchDays: 25,
   },
   {
     id: TECH_IDS.fuelingDepotTier,
@@ -74,6 +81,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'Expanded propellant storage at the depot.',
     category: 'infrastructure',
     cost: { budget: -2500, fuel: -15 },
+    researchDays: 15,
   },
   {
     id: TECH_IDS.crawlerTier,
@@ -81,6 +89,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'Hardened ground equipment tolerates colder conditions, widening the safe weather floor.',
     category: 'infrastructure',
     cost: { budget: -2500, parts: -15 },
+    researchDays: 15,
   },
   {
     id: TECH_IDS.missionControlTier,
@@ -88,6 +97,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'Deeper bench of controllers and better telemetry trims no-go odds across the board.',
     category: 'infrastructure',
     cost: { budget: -3500, parts: -10 },
+    researchDays: 20,
   },
   {
     id: TECH_IDS.trainingCenterTier,
@@ -95,6 +105,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'A better simulator and training regimen raises every active astronaut’s effective skills.',
     category: 'infrastructure',
     cost: { budget: -3500, safetyGear: -10 },
+    researchDays: 20,
   },
   {
     id: TECH_IDS.rdLabTier,
@@ -102,6 +113,7 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
     description: 'A larger research staff raises the R&D generation rate, and unlocks Exotic Propulsion research.',
     category: 'infrastructure',
     cost: { budget: -4000, parts: -20 },
+    researchDays: 22,
   },
 ]
 

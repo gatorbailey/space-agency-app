@@ -55,6 +55,18 @@ function applyFacilityBonus(facility: FacilityState, techId: string): FacilitySt
   return next
 }
 
+/** Applied when a research project completes, not when it starts — cost is already spent. */
+function completeResearch(
+  state: Pick<GameState, 'resources' | 'facility' | 'unlockedTech'>,
+  node: { id: string; bonusEffect?: ResourceDelta },
+): Pick<GameState, 'resources' | 'facility' | 'unlockedTech'> {
+  return {
+    resources: applyDelta(state.resources, node.bonusEffect ?? {}),
+    facility: applyFacilityBonus(state.facility, node.id),
+    unlockedTech: [...state.unlockedTech, node.id],
+  }
+}
+
 export function createInitialState(content: GameContent): GameState {
   return {
     day: 0,
@@ -66,6 +78,7 @@ export function createInitialState(content: GameContent): GameState {
     pendingFuel: 0,
     pendingRD: 0,
     unlockedTech: [],
+    activeResearch: null,
     activeCards: [],
     resolvedCards: {},
     launch: null,
@@ -156,15 +169,32 @@ export function gameReducer(
       // player sets via SET_OPS_ALLOCATION. All-or-nothing per category per
       // day, same affordability gate as procurement/research — no partial
       // funding.
+      let facility = state.facility
       for (const def of content.opsCategories) {
         const allocation = state.opsAllocation[def.id] ?? 0
         if (allocation <= 0) continue
         const cost = dailyOpsCost(def, allocation)
         if (cost > 0 && !canAfford(resources, { budget: -cost })) continue
         resources = applyDelta(resources, { budget: -cost })
-        const applied = applyOpsEffect(resources, pendingRD, state.facility, dailyOpsEffect(def, allocation))
+        const applied = applyOpsEffect(resources, pendingRD, facility, dailyOpsEffect(def, allocation))
         resources = applied.resources
         pendingRD = applied.pendingRD
+      }
+
+      // The R&D Lab works one project at a time; cost was already paid when
+      // research began, so completion just unlocks it and applies its
+      // facility/bonus effects.
+      let activeResearch = state.activeResearch
+      let unlockedTech = state.unlockedTech
+      if (activeResearch && day >= activeResearch.completesOnDay) {
+        const node = content.techTree.find((t) => t.id === activeResearch?.techId)
+        if (node) {
+          const completed = completeResearch({ resources, facility, unlockedTech }, node)
+          resources = completed.resources
+          facility = completed.facility
+          unlockedTech = completed.unlockedTech
+        }
+        activeResearch = null
       }
 
       return {
@@ -176,6 +206,9 @@ export function gameReducer(
         activeCards,
         resolvedCards,
         resources,
+        facility,
+        activeResearch,
+        unlockedTech,
         lastExpiredCard,
         lastBudgetCycleDay,
         lastAppropriation,
@@ -237,14 +270,13 @@ export function gameReducer(
       const node = content.techTree.find((t) => t.id === action.techId)
       if (!node) return state
       if (state.unlockedTech.includes(node.id)) return state
+      if (state.activeResearch) return state // the R&D Lab works one project at a time
       if (node.requiresTechId && !state.unlockedTech.includes(node.requiresTechId)) return state
       if (!canAfford(state.resources, node.cost)) return state
-      const resources = applyDelta(applyDelta(state.resources, node.cost), node.bonusEffect ?? {})
       return {
         ...state,
-        resources,
-        facility: applyFacilityBonus(state.facility, node.id),
-        unlockedTech: [...state.unlockedTech, node.id],
+        resources: applyDelta(state.resources, node.cost),
+        activeResearch: { techId: node.id, startedOnDay: state.day, completesOnDay: state.day + node.researchDays },
       }
     }
 

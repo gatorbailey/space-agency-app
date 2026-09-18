@@ -711,21 +711,52 @@ describe('tech tree', () => {
     expect(state.pendingRD).toBe(0)
   })
 
-  it('RESEARCH_TECH unlocks a node and deducts its cost', () => {
+  it('RESEARCH_TECH deducts its cost up front and starts a timed research project, not an instant unlock', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20, budget: -500 } }],
+      techTree: [
+        {
+          id: 'test-tech',
+          name: 'Test Tech',
+          description: '',
+          category: 'knowledge',
+          cost: { rd: -20, budget: -500 },
+          researchDays: 3,
+        },
+      ],
     })
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 25 } }
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
-    expect(state.unlockedTech).toContain('test-tech')
+    expect(state.unlockedTech).not.toContain('test-tech')
+    expect(state.activeResearch).toEqual({ techId: 'test-tech', startedOnDay: 0, completesOnDay: 3 })
     expect(state.resources.rd).toBe(5)
     expect(state.resources.budget).toBe(500) // 1000 - 500
   })
 
+  it('unlocks the node once its research time elapses, clearing activeResearch', () => {
+    const content = makeContent({
+      techTree: [
+        { id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20 }, researchDays: 3 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = { ...state, resources: { ...state.resources, rd: 25 } }
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 2; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.unlockedTech).not.toContain('test-tech')
+    expect(state.activeResearch).not.toBeNull()
+
+    state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    expect(state.unlockedTech).toContain('test-tech')
+    expect(state.activeResearch).toBeNull()
+  })
+
   it('RESEARCH_TECH is blocked when unaffordable, leaving state untouched', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20 } }],
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -20 }, researchDays: 3 }],
     })
     const state = createInitialState(content) // rd starts at 0
     const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'test-tech' }, content, alwaysGo)
@@ -735,7 +766,7 @@ describe('tech tree', () => {
 
   it('RESEARCH_TECH is a no-op once the node is already unlocked', () => {
     const content = makeContent({
-      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -5 } }],
+      techTree: [{ id: 'test-tech', name: 'Test Tech', description: '', category: 'knowledge', cost: { rd: -5 }, researchDays: 3 }],
     })
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 100 }, unlockedTech: ['test-tech'] }
@@ -743,20 +774,46 @@ describe('tech tree', () => {
     expect(next).toBe(state)
   })
 
-  it('Materials Science raises the daily Parts accrual rate once researched', () => {
+  it('RESEARCH_TECH is blocked while another project is already in progress — one slot at a time', () => {
     const content = makeContent({
       techTree: [
-        { id: TECH_IDS.materialsScience, name: 'Materials Science', description: '', category: 'knowledge', cost: {} },
+        { id: 'tech-a', name: 'A', description: '', category: 'knowledge', cost: {}, researchDays: 5 },
+        { id: 'tech-b', name: 'B', description: '', category: 'knowledge', cost: {}, researchDays: 5 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'tech-a' }, content, alwaysGo)
+    const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'tech-b' }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('Materials Science raises the daily Parts accrual rate once its research completes', () => {
+    const content = makeContent({
+      facility: { partsPerDay: 5, partsStorageCap: 999, fuelPerDay: 3, fuelStorageCap: 15, rdPerDay: 2, rdStorageCap: 10 },
+      techTree: [
+        {
+          id: TECH_IDS.materialsScience,
+          name: 'Materials Science',
+          description: '',
+          category: 'knowledge',
+          cost: {},
+          researchDays: 4,
+        },
       ],
     })
     let state = createInitialState(content)
     state = { ...state, resources: { ...state.resources, rd: 100, budget: 100000 } }
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.materialsScience }, content, alwaysGo)
-    expect(state.facility.partsPerDay).toBe(9) // base 5/day + 4 bonus, applied once at research
-
     state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 4; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.unlockedTech).toContain(TECH_IDS.materialsScience)
+    expect(state.facility.partsPerDay).toBe(9) // base 5/day + 4 bonus, applied once research completes
+    expect(state.pendingParts).toBe(20) // 4 days at the old rate — the bonus lands after this tick's accrual
+
     state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
-    expect(state.pendingParts).toBe(9)
+    expect(state.pendingParts).toBe(29) // 20 + 9 at the new rate
   })
 
   it('Life Support halves the crew-readiness penalty on a failed mission', () => {
@@ -857,36 +914,54 @@ describe('tech tree', () => {
 })
 
 describe('infrastructure tech tree', () => {
-  it('Fueling Depot Tier raises the fuel storage cap once researched', () => {
+  it('Fueling Depot Tier raises the fuel storage cap once its research completes', () => {
     const content = makeContent({
       techTree: [
-        { id: TECH_IDS.fuelingDepotTier, name: 'Fueling Depot', description: '', category: 'infrastructure', cost: {} },
+        {
+          id: TECH_IDS.fuelingDepotTier,
+          name: 'Fueling Depot',
+          description: '',
+          category: 'infrastructure',
+          cost: {},
+          researchDays: 3,
+        },
       ],
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.fuelingDepotTier }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 3; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
     expect(state.facility.fuelStorageCap).toBe(35) // base 15 + 20 bonus
   })
 
-  it('R&D Lab Tier raises the R&D generation rate once researched', () => {
+  it('R&D Lab Tier raises the R&D generation rate once its research completes', () => {
     const content = makeContent({
-      techTree: [{ id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} }],
+      techTree: [
+        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {}, researchDays: 3 },
+      ],
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.rdLabTier }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 3; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
     expect(state.facility.rdPerDay).toBe(7) // base 2 + 5 bonus
   })
 
   it('Exotic Propulsion is blocked until the R&D Lab tier is researched', () => {
     const content = makeContent({
       techTree: [
-        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} },
+        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {}, researchDays: 2 },
         {
           id: TECH_IDS.propulsionExotic,
           name: 'Exotic',
           description: '',
           category: 'knowledge',
           cost: {},
+          researchDays: 3,
           requiresTechId: TECH_IDS.rdLabTier,
           bonusEffect: { sentiment: -8 },
         },
@@ -897,16 +972,17 @@ describe('infrastructure tech tree', () => {
     expect(next).toBe(state)
   })
 
-  it('Exotic Propulsion unlocks once the R&D Lab tier is researched, applying its Sentiment tax', () => {
+  it('Exotic Propulsion unlocks once the R&D Lab tier finishes researching, applying its Sentiment tax', () => {
     const content = makeContent({
       techTree: [
-        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {} },
+        { id: TECH_IDS.rdLabTier, name: 'R&D Lab', description: '', category: 'infrastructure', cost: {}, researchDays: 2 },
         {
           id: TECH_IDS.propulsionExotic,
           name: 'Exotic',
           description: '',
           category: 'knowledge',
           cost: {},
+          researchDays: 3,
           requiresTechId: TECH_IDS.rdLabTier,
           bonusEffect: { sentiment: -8 },
         },
@@ -914,12 +990,21 @@ describe('infrastructure tech tree', () => {
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.rdLabTier }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 2; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.unlockedTech).toContain(TECH_IDS.rdLabTier)
+
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.propulsionExotic }, content, alwaysGo)
+    for (let i = 0; i < 3; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
     expect(state.unlockedTech).toContain(TECH_IDS.propulsionExotic)
     expect(state.resources.sentiment).toBe(42) // 50 - 8
   })
 
-  it('a mission with requiredTechId is blocked until that tech is researched', () => {
+  it('a mission with requiredTechId is blocked until that tech finishes researching', () => {
     const content = makeContent({
       milestones: [
         {
@@ -933,7 +1018,7 @@ describe('infrastructure tech tree', () => {
           requiredTechId: TECH_IDS.vabTier,
         },
       ],
-      techTree: [{ id: TECH_IDS.vabTier, name: 'VAB', description: '', category: 'infrastructure', cost: {} }],
+      techTree: [{ id: TECH_IDS.vabTier, name: 'VAB', description: '', category: 'infrastructure', cost: {}, researchDays: 3 }],
     })
     let state = createInitialState(content)
     state = gameReducer(
@@ -945,6 +1030,10 @@ describe('infrastructure tech tree', () => {
     expect(state.launch).toBeNull()
 
     state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.vabTier }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 3; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
     state = gameReducer(
       state,
       { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' },

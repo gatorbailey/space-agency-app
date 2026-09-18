@@ -263,12 +263,25 @@ export interface TechNodeDef {
   name: string
   description: string
   category: 'knowledge' | 'infrastructure'
-  /** Deducted from resources on research — a negative delta. */
+  /** Deducted from resources up front, when research begins — a negative delta. */
   cost: ResourceDelta
+  /** Sim-days the R&D Lab spends on this node after cost is paid, before it unlocks. */
+  researchDays: number
   /** Another tech node that must already be researched, e.g. Exotic Propulsion requiring the R&D Lab tier. */
   requiresTechId?: string
-  /** Applied alongside cost when researched — e.g. Exotic Propulsion's inherent Sentiment tax. */
+  /** Applied alongside the unlock when research completes — e.g. Exotic Propulsion's inherent Sentiment tax. */
   bonusEffect?: ResourceDelta
+}
+
+/**
+ * The R&D Lab works one project at a time — cost is paid up front, then the
+ * node unlocks researchDays later. Per CLAUDE.md's "tech tree to have a time
+ * element needed to unlock after purchasing with R&D."
+ */
+export interface ActiveResearch {
+  techId: string
+  startedOnDay: number
+  completesOnDay: number
 }
 
 export interface GameState {
@@ -286,6 +299,8 @@ export interface GameState {
   pendingRD: number
   /** Ids of researched knowledge-tech nodes. */
   unlockedTech: string[]
+  /** The one tech node currently being researched, if any — the R&D Lab has a single project slot. */
+  activeResearch: ActiveResearch | null
   activeCards: ActiveCard[]
   /** Maps card id to the sim day it was last resolved, for cooldown-based redraws. */
   resolvedCards: Record<string, number>
