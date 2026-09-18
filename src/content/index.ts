@@ -1,5 +1,6 @@
 import type { GameContent, ResourceState } from '../simulation'
 import { ACTIVE_ROSTER_CAP, ASTRONAUT_POOL, INITIAL_ACTIVE_ASTRONAUT_IDS } from './astronauts'
+import { BUDGET_CYCLE } from './budget'
 import { CARD_POOL } from './cards'
 import { MATERIAL_LABELS, PROCUREMENT } from './materials'
 import { MILESTONES } from './milestones'
@@ -28,6 +29,7 @@ export const GAME_CONTENT: GameContent = {
   techTree: TECH_TREE,
   tours: TOURS,
   procurement: PROCUREMENT,
+  budgetCycle: BUDGET_CYCLE,
   facility: FACILITY,
   startingResources: STARTING_RESOURCES,
   astronautPool: ASTRONAUT_POOL,
@@ -37,6 +39,7 @@ export const GAME_CONTENT: GameContent = {
 
 export {
   ASTRONAUT_POOL,
+  BUDGET_CYCLE,
   CARD_POOL,
   GO_NO_GO_STATIONS,
   MATERIAL_LABELS,

@@ -1,3 +1,4 @@
+import { estimateAppropriation } from './budget'
 import { findOption, pickEligibleCard } from './cards'
 import { evaluateStation, resolveOutcome, rollWeather, wasAvoidableRisk } from './launch'
 import { generateHeadlines } from './press'
@@ -80,6 +81,8 @@ export function createInitialState(content: GameContent): GameState {
     lastTourDay: {},
     lastTourOutcome: null,
     lastExpiredCard: null,
+    lastBudgetCycleDay: 0,
+    lastAppropriation: null,
   }
 }
 
@@ -134,6 +137,18 @@ export function gameReducer(
         }
       }
 
+      // Appropriation cycle: budget is granted automatically, sized by
+      // Sentiment at that moment — the Sentiment -> Budget ripple from
+      // CLAUDE.md's core resource web, not just a milestone reward.
+      let lastBudgetCycleDay = state.lastBudgetCycleDay
+      let lastAppropriation = state.lastAppropriation
+      if (day - lastBudgetCycleDay >= content.budgetCycle.cycleDays) {
+        const amount = estimateAppropriation(resources.sentiment, content.budgetCycle)
+        resources = applyDelta(resources, { budget: amount })
+        lastBudgetCycleDay = day
+        lastAppropriation = { day, amount, sentimentAtCycle: resources.sentiment }
+      }
+
       return {
         ...state,
         day,
@@ -144,6 +159,8 @@ export function gameReducer(
         resolvedCards,
         resources,
         lastExpiredCard,
+        lastBudgetCycleDay,
+        lastAppropriation,
         // 'flag' cards queue in the status menu without interrupting the
         // clock; only a 'pause' card (rare/urgent) stops time outright.
         speed: drawnCardSeverity === 'pause' ? 'paused' : state.speed,

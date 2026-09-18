@@ -80,6 +80,7 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
       { materialType: 'safetyGear', budgetCost: 200, amount: 5 },
       { materialType: 'provisions', budgetCost: 100, amount: 10 },
     ],
+    budgetCycle: { cycleDays: 5, baseAppropriation: 200, budgetPerSentiment: 2 },
     facility: { partsPerDay: 5, partsStorageCap: 20, fuelPerDay: 3, fuelStorageCap: 15, rdPerDay: 2, rdStorageCap: 10 },
     startingResources: {
       sentiment: 50,
@@ -193,6 +194,42 @@ describe('materials accrual', () => {
     const state = createInitialState(content)
     const next = gameReducer(state, { type: 'PROCURE_MATERIAL', materialType: 'payload' }, content, alwaysGo)
     expect(next).toBe(state)
+  })
+})
+
+describe('budget cycle', () => {
+  it('does not grant an appropriation before cycleDays elapses', () => {
+    const content = makeContent() // budgetCycle.cycleDays: 5
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 4; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.resources.budget).toBe(1000)
+    expect(state.lastAppropriation).toBeNull()
+  })
+
+  it('grants an appropriation sized by Sentiment once cycleDays elapses', () => {
+    const content = makeContent() // baseAppropriation: 200, budgetPerSentiment: 2, starting sentiment: 50
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 5; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.resources.budget).toBe(1300) // 1000 + (200 + 50*2)
+    expect(state.lastBudgetCycleDay).toBe(5)
+    expect(state.lastAppropriation).toEqual({ day: 5, amount: 300, sentimentAtCycle: 50 })
+  })
+
+  it('cycles again after another full interval', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 10; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.resources.budget).toBe(1600) // two grants of 300
+    expect(state.lastBudgetCycleDay).toBe(10)
   })
 })
 

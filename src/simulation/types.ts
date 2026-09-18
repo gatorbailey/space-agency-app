@@ -48,6 +48,28 @@ export interface ProcurementDef {
   amount: number
 }
 
+/**
+ * Per CLAUDE.md: "Budget/Funds — hard currency, granted in appropriation
+ * cycles sized by current Sentiment." A cycle fires automatically every
+ * cycleDays; the grant scales with Sentiment at that moment so the
+ * Sentiment -> Budget ripple in the core loop is a real mechanic, not just
+ * a milestone-reward side effect.
+ */
+export interface BudgetCycleDef {
+  /** Sim-days between appropriation cycles. */
+  cycleDays: number
+  /** Guaranteed floor, regardless of Sentiment. */
+  baseAppropriation: number
+  /** Additional budget granted per point of Sentiment at cycle time. */
+  budgetPerSentiment: number
+}
+
+export interface AppropriationEvent {
+  day: number
+  amount: number
+  sentimentAtCycle: number
+}
+
 export interface DecisionOption {
   id: string
   label: string
@@ -252,6 +274,10 @@ export interface GameState {
   lastTourOutcome: TourOutcome | null
   /** Most recent card that expired unanswered and auto-resolved. */
   lastExpiredCard: ExpiredCard | null
+  /** Sim day the last appropriation cycle fired, for the countdown display. */
+  lastBudgetCycleDay: number
+  /** Most recent appropriation cycle's grant, for UI feedback. */
+  lastAppropriation: AppropriationEvent | null
 }
 
 export interface ExpiredCard {
@@ -303,6 +329,7 @@ export interface GameContent {
   techTree: TechNodeDef[]
   tours: TourDef[]
   procurement: ProcurementDef[]
+  budgetCycle: BudgetCycleDef
   facility: FacilityState
   startingResources: ResourceState
   astronautPool: AstronautDef[]

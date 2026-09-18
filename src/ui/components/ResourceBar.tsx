@@ -1,3 +1,5 @@
+import { GAME_CONTENT } from '../../content'
+import { daysUntilBudgetCycle, estimateAppropriation } from '../../simulation'
 import { useGame } from '../useGame'
 
 function formatBudget(value: number): string {
@@ -7,6 +9,8 @@ function formatBudget(value: number): string {
 export function ResourceBar() {
   const { state, dispatch } = useGame()
   const { resources, pendingRD, facility } = state
+  const daysLeft = daysUntilBudgetCycle(state, GAME_CONTENT.budgetCycle)
+  const estimatedAppropriation = estimateAppropriation(resources.sentiment, GAME_CONTENT.budgetCycle)
 
   return (
     <div className="flex flex-col gap-2 border-b border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-200">
@@ -29,6 +33,18 @@ export function ResourceBar() {
         >
           Collect
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+        <span>
+          Next appropriation: <span className="font-mono text-emerald-300">{daysLeft}d</span> — est.{' '}
+          {formatBudget(estimatedAppropriation)} at current Sentiment
+        </span>
+        {state.lastAppropriation && (
+          <span className="text-slate-500">
+            (last cycle, Day {state.lastAppropriation.day}: +{formatBudget(state.lastAppropriation.amount)})
+          </span>
+        )}
       </div>
     </div>
   )
