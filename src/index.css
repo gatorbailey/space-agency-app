@@ -41,6 +41,27 @@
   }
 }
 
+@keyframes sa-sweep {
+  0%,
+  100% {
+    transform: rotate(-16deg);
+  }
+  50% {
+    transform: rotate(16deg);
+  }
+}
+
+@keyframes sa-smoke {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-18px) scale(1.3);
+    opacity: 0;
+  }
+}
+
 .sa-beacon {
   animation: sa-blink 1.6s ease-in-out infinite;
 }
@@ -60,11 +81,23 @@
   transform-origin: center;
 }
 
+.sa-sweep {
+  animation: sa-sweep 6s ease-in-out infinite;
+}
+
+.sa-smoke {
+  animation: sa-smoke 2.4s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sa-beacon,
   .sa-work-ring,
   .sa-glow,
-  .sa-bubble {
+  .sa-bubble,
+  .sa-sweep,
+  .sa-smoke {
     animation: none;
   }
 }

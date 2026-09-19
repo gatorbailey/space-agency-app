@@ -1,6 +1,6 @@
-import { BUILDINGS, CARD_POOL, MAP_HEIGHT, MAP_WIDTH, TECH_TREE } from '../../content'
+import { BUILDINGS, CARD_POOL, MAP_HEIGHT, MAP_WIDTH, TECH_TREE, findBuilding } from '../../content'
 import type { BuildingDef, BuildingId } from '../../content'
-import type { CardDepartment, GameState } from '../../simulation'
+import type { CardDepartment, ClockSpeed, GameState } from '../../simulation'
 import { useGame } from '../useGame'
 import { BuildingArt } from './BuildingArt'
 
@@ -63,6 +63,54 @@ const TREES: [number, number][] = [
   [320, 950],
 ]
 
+/**
+ * The road spine — a hand-placed backbone running down the middle of the
+ * safe corridor, roughly between each row's buildings. Every building gets
+ * a straight spur from its row's anchor point to its own door (computed
+ * below from content/buildings.ts, so it stays in sync if positions move);
+ * the VAB-to-pad crawlerway is drawn separately since it's mechanically
+ * meaningful (Stage 3), not just decorative.
+ */
+const SPINE: [number, number][] = [
+  [207, 75],
+  [194, 205],
+  [202, 301],
+  [194, 421],
+  [210, 541],
+  [190, 658],
+  [211, 778],
+  [205, 940],
+]
+const SPINE_PATH = `M ${SPINE.map(([x, y]) => `${x},${y}`).join(' L ')}`
+
+const SPUR_ANCHOR: Record<BuildingId, [number, number]> = {
+  admin: SPINE[0],
+  'budget-office': SPINE[0],
+  press: SPINE[1],
+  security: SPINE[2],
+  barracks: SPINE[2],
+  'mission-control': SPINE[3],
+  'rd-lab': SPINE[4],
+  fabrication: SPINE[4],
+  materials: SPINE[5],
+  depot: SPINE[6],
+  vab: SPINE[6],
+  'launch-pad': SPINE[7],
+}
+
+function doorPoint(building: BuildingDef): [number, number] {
+  return [building.x + building.w / 2, building.y + building.h]
+}
+
+const CRAWLERWAY_PATH = (() => {
+  const [vx, vy] = doorPoint(findBuilding('vab'))
+  const [px, py] = SPINE[7]
+  return `M ${vx},${vy} Q ${(vx + px) / 2},${vy + 45} ${px},${py}`
+})()
+
+/** Sim-seconds for one lap of the spine, by clock speed — no traffic while paused. */
+const TRAFFIC_LAP_SECONDS: Partial<Record<ClockSpeed, number>> = { normal: 16, fast: 7, faster: 3 }
+
 interface SiteMapProps {
   selectedId: BuildingId | null
   onSelect: (id: BuildingId) => void
@@ -71,6 +119,7 @@ interface SiteMapProps {
 export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
   const { state } = useGame()
   const badges = flaggedCountsByDepartment(state)
+  const trafficLapSeconds = TRAFFIC_LAP_SECONDS[state.speed]
 
   return (
     <svg
@@ -101,13 +150,37 @@ export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
       <path d={GRASS_PATH} fill="#3a5f43" />
       <path d={GRASS_PATH} fill="url(#sa-grass-tex)" opacity={0.55} />
 
-      {/* Roads: the crawlerway (VAB to the pad) plus a couple of connecting paths. */}
-      <path d="M 265,850 Q 230,870 205,890" fill="none" stroke="#1e293b" strokeWidth={12} strokeLinecap="round" />
-      <path d="M 265,850 Q 230,870 205,890" fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="7 7" />
-      <path d="M 194,240 Q 194,255 194,270" fill="none" stroke="#1e293b" strokeWidth={9} strokeLinecap="round" />
-      <path d="M 194,240 Q 194,255 194,270" fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="5 5" />
-      <path d="M 194,462 Q 194,480 194,500" fill="none" stroke="#1e293b" strokeWidth={9} strokeLinecap="round" />
-      <path d="M 194,462 Q 194,480 194,500" fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="5 5" />
+      {/* Roads: the spine, a spur to every building's door, and the dedicated crawlerway. */}
+      <path id="sa-spine-path" d={SPINE_PATH} fill="none" stroke="#1e293b" strokeWidth={9} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={SPINE_PATH} fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="6 6" strokeLinejoin="round" />
+      {BUILDINGS.map((building) => {
+        const [ax, ay] = SPUR_ANCHOR[building.id]
+        const [dx, dy] = doorPoint(building)
+        const d = `M ${ax},${ay} L ${dx},${dy}`
+        return (
+          <g key={building.id}>
+            <path d={d} fill="none" stroke="#1e293b" strokeWidth={6} strokeLinecap="round" />
+            <path d={d} fill="none" stroke="#475569" strokeWidth={1} strokeDasharray="4 5" />
+          </g>
+        )
+      })}
+      <path d={CRAWLERWAY_PATH} fill="none" stroke="#1e293b" strokeWidth={12} strokeLinecap="round" />
+      <path d={CRAWLERWAY_PATH} fill="none" stroke="#64748b" strokeWidth={1.5} strokeDasharray="7 7" />
+
+      {trafficLapSeconds && (
+        <g fill="#fbbf24">
+          <rect x={-3} y={-2} width={6} height={4} rx={1}>
+            <animateMotion dur={`${trafficLapSeconds}s`} repeatCount="indefinite" rotate="auto">
+              <mpath href="#sa-spine-path" />
+            </animateMotion>
+          </rect>
+          <rect x={-3} y={-2} width={6} height={4} rx={1} fill="#94a3b8">
+            <animateMotion dur={`${trafficLapSeconds}s`} begin={`${trafficLapSeconds / 2}s`} repeatCount="indefinite" rotate="auto">
+              <mpath href="#sa-spine-path" />
+            </animateMotion>
+          </rect>
+        </g>
+      )}
 
       <g fill="#2f5136">
         {TREES.map(([x, y]) => (
@@ -124,7 +197,7 @@ export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
       </g>
 
       {/* A reserved, empty lot — a future second site, not tied to any system yet. */}
-      <g transform="translate(250,615)" opacity={0.7}>
+      <g transform="translate(260,615)" opacity={0.7}>
         <rect x={0} y={0} width={70} height={50} rx={3} fill="none" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" />
         <line x1={0} y1={0} x2={70} y2={50} stroke="#475569" strokeWidth={1} strokeDasharray="3 4" />
         <line x1={70} y1={0} x2={0} y2={50} stroke="#475569" strokeWidth={1} strokeDasharray="3 4" />

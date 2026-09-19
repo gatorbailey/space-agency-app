@@ -65,20 +65,29 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
   shadow, not a flat top-down icon. Terrain in `SiteMap.tsx` is a tall
   peninsula (grass + beach fringe, a guaranteed-safe interior corridor for
   placing buildings without water-overlap, water with ripple decoration,
-  scattered trees, a crawlerway road) sized for a scrolling phone screen;
-  the 12 buildings from `src/content/buildings.ts` are staggered left/right
-  down it, not gridded. Tapping a building opens a bottom-sheet drawer
-  housing that system's existing panel; infrastructure tiers appear as
-  "Upgrades" inside the building they improve, changing its silhouette.
-  Flagged cards pop a small bubble above their building instead of a
-  corner badge; buildings at work glow with a dashed work ring (sky for
-  research, amber for construction). An empty dashed "Future Site" lot is
+  scattered trees) sized for a scrolling phone screen; the 12 buildings
+  from `src/content/buildings.ts` are staggered left/right down it, not
+  gridded, spaced so side-by-side pairs don't crowd each other. A hand-
+  placed road spine runs the length of the site with a spur to every
+  building's door (both derived/rendered from the same building data, so
+  they can't drift out of sync), plus a separate crawlerway from the VAB to
+  the pad (kept visually distinct since it's mechanically meaningful once
+  Stage 3 lands). Small vehicles loop the spine via SVG `animateMotion`
+  when the clock is running — lap time scales with clock speed, no traffic
+  while paused. Tapping a building opens a bottom-sheet drawer housing that
+  system's existing panel; infrastructure tiers appear as "Upgrades" inside
+  the building they improve, changing its silhouette. Flagged cards pop a
+  small bubble above their building instead of a corner badge; buildings
+  at work glow with a dashed work ring (sky for research, amber for
+  construction); Mission Control's dish sweeps and Fabrication's stack
+  puffs smoke, always-on ambient life. An empty dashed "Future Site" lot is
   reserved on the map for the second-site backlog item — decorative only,
   nothing unlocks it yet. A List toggle keeps the old stacked-panel view
   reachable. The building art (`BuildingArt.tsx`) and terrain went through
-  two rounds of user feedback (proportions/shadow/overlap, then a fully
-  linear layout) before landing here — worth knowing if either needs
-  further real-world-reference passes (actual Cape Canaveral geometry).
+  several rounds of user feedback (proportions/shadow/overlap, a fully
+  linear layout, buildings sitting too close together) before landing
+  here — worth knowing if either needs further real-world-reference passes
+  (actual Cape Canaveral geometry).
 - Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
   chance.
 - Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,
@@ -103,13 +112,14 @@ detail):
 - Cloud sync for saves.
 - Rival program(s), contractors with loyalty, administrations, alt-history
   forks, partnership missions (Phase 3).
-- Map stages still ahead (agreed sequence): (2) building life — activity
-  animations and ambient site traffic that follows clock speed; (3) crawler
-  rollout/rollback as a real sim mechanic — a `rollout` stage before the
-  weather check with the clock running, `rollback` after a scrub, Crawler
-  Tier II shortening both, the crawler physically moving VAB → pad and back;
-  (4) on-pad repair as a risky alternative to rollback; later, launch
-  plume/mishap/event animations and recovery ops.
+- Map stages still ahead (agreed sequence): (3) crawler rollout/rollback as
+  a real sim mechanic — a `rollout` stage before the weather check with the
+  clock running, `rollback` after a scrub, Crawler Tier II shortening both,
+  the crawler physically moving VAB → pad along the existing crawlerway
+  road and back; (4) on-pad repair as a risky alternative to rollback;
+  later, launch plume/mishap/event animations and recovery ops. Stage (2)
+  building life is done — see Implementation Status above (road network,
+  ambient traffic, dish sweep, factory smoke).
 - A message-center / command-center alternate view of the alert queue.
 - The full fueling-window hold-clock tension in the launch sequence — still
   simplified to weather check → go/no-go → outcome, not the staged 6-step

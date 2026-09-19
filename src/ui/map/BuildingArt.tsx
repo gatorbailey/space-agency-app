@@ -232,8 +232,10 @@ function Dish({ cx, cy }: { cx: number; cy: number }) {
   return (
     <>
       <line x1={cx} y1={cy} x2={cx} y2={cy + 16} stroke={STEEL} strokeWidth={2} />
-      <path d={`M ${cx - 12} ${cy - 4} A 12 12 0 0 0 ${cx + 12} ${cy - 4} Z`} fill={STEEL} stroke={EDGE} />
-      <line x1={cx} y1={cy - 4} x2={cx} y2={cy - 14} stroke={EDGE} strokeWidth={1.5} />
+      <g className="sa-sweep" style={{ transformOrigin: `${cx}px ${cy - 4}px` }}>
+        <path d={`M ${cx - 12} ${cy - 4} A 12 12 0 0 0 ${cx + 12} ${cy - 4} Z`} fill={STEEL} stroke={EDGE} />
+        <line x1={cx} y1={cy - 4} x2={cx} y2={cy - 14} stroke={EDGE} strokeWidth={1.5} />
+      </g>
     </>
   )
 }
@@ -268,6 +270,18 @@ function Factory({ w, h }: Props) {
       <rect x={0} y={frontTop} width={frontW} height={boxH - frontTop} fill={FRONT} stroke={EDGE} />
       <polygon points={`0,${frontTop} ${roofPts} ${frontW},${frontTop}`} fill={ROOF_LIT} stroke="#8899ad" />
       <rect x={frontW - 16} y={frontTop - 32} width={7} height={32} fill={STEEL} stroke={EDGE} />
+      {[0, 1, 2].map((i) => (
+        <circle
+          key={i}
+          className="sa-smoke"
+          style={{ animationDelay: `${i * 0.8}s` }}
+          cx={frontW - 12.5}
+          cy={frontTop - 34}
+          r={4}
+          fill="#94a3b8"
+          opacity={0.5}
+        />
+      ))}
       <Windows x={8} y={frontTop + 14} count={Math.floor((frontW - 16) / 12)} />
       <rect x={8} y={boxH - 20} width={26} height={20} fill={DARK} />
     </g>
