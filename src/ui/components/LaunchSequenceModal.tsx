@@ -2,17 +2,20 @@ import { GO_NO_GO_STATIONS, MILESTONES } from '../../content'
 import { canAfford } from '../../simulation'
 import { useGame } from '../useGame'
 
+const REPAIR_PARTS_COST = 15
+
 export function LaunchSequenceModal() {
   const { state, dispatch } = useGame()
   const launch = state.launch
-  // Rollout/rollback are crawler transit, not a decision point — the clock
+  // Rollout/rollback/repair are all timed, non-blocking detours — the clock
   // keeps running, so this doesn't block the rest of the app. Progress
   // shows on the site map and in the clock's status banner instead.
-  if (!launch || launch.stage === 'rollout' || launch.stage === 'rollback') return null
+  if (!launch || launch.stage === 'rollout' || launch.stage === 'rollback' || launch.stage === 'repair') return null
 
   const mission = MILESTONES.find((m) => m.id === launch.missionId)
   const blockedByStations = launch.stations.some((s) => !s.isGo && !s.overridden)
   const affordable = mission ? canAfford(state.resources, mission.cost) : false
+  const canRepair = canAfford(state.resources, { parts: -REPAIR_PARTS_COST })
   const crew = state.roster.astronauts.find((a) => a.id === launch.astronautId)
 
   return (
@@ -87,13 +90,24 @@ export function LaunchSequenceModal() {
                     </div>
                     <p className="mt-1 text-xs text-slate-400">{status.reasoning}</p>
                     {!status.isGo && !status.overridden && (
-                      <button
-                        type="button"
-                        onClick={() => dispatch({ type: 'OVERRIDE_STATION', stationId: status.stationId })}
-                        className="mt-2 rounded border border-amber-700 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-950"
-                      >
-                        Override
-                      </button>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => dispatch({ type: 'OVERRIDE_STATION', stationId: status.stationId })}
+                          className="rounded border border-amber-700 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-950"
+                        >
+                          Override
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canRepair}
+                          onClick={() => dispatch({ type: 'REPAIR_ON_PAD', stationId: status.stationId })}
+                          title={`Costs ${REPAIR_PARTS_COST} Parts — ~2 days, not guaranteed to fix it`}
+                          className="rounded border border-sky-700 px-3 py-1 text-xs font-semibold text-sky-300 hover:bg-sky-950 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Repair on Pad ({REPAIR_PARTS_COST} Parts)
+                        </button>
+                      </div>
                     )}
                   </li>
                 )

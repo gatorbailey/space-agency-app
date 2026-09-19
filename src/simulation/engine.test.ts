@@ -124,6 +124,12 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
 const alwaysGo: () => number = () => 0.99 // never below any no-go/failure threshold
 const alwaysFail: () => number = () => 0.001 // always below thresholds -> no-go / failure
 
+/** Returns each value in order, then repeats the last one — for tests that need distinct successive rng() calls. */
+function sequenceRng(values: number[]): Rng {
+  let i = 0
+  return () => values[Math.min(i++, values.length - 1)]
+}
+
 /** Advances the clock until a just-started launch's crawler rollout finishes and the weather stage begins. */
 function completeRollout(state: GameState, content: GameContent, rng: Rng): GameState {
   let s = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, rng)
@@ -530,6 +536,123 @@ describe('launch sequence', () => {
     const tierDays = withTier.launch!.transitCompletesOnDay!
 
     expect(tierDays).toBeLessThan(baseDays)
+  })
+
+  it('REPAIR_ON_PAD is only available on a no-go, non-overridden station during go-no-go', () => {
+    const base = makeContent()
+    const content = { ...base, startingResources: { ...base.startingResources, parts: 30 } }
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+    state = completeRollout(state, content, alwaysFail)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+    const noGoStation = state.launch!.stations.find((s) => !s.isGo)!
+
+    // Not reachable outside go-no-go (still weather-staged rollout copy has no stations).
+    const tooEarly = createInitialState(content)
+    expect(gameReducer(tooEarly, { type: 'REPAIR_ON_PAD', stationId: 'propulsion' }, content, alwaysFail)).toBe(tooEarly)
+
+    // Unknown/already-go station is a no-op.
+    const goStation = state.launch!.stations.find((s) => s.isGo)
+    if (goStation) {
+      const noop = gameReducer(state, { type: 'REPAIR_ON_PAD', stationId: goStation.stationId }, content, alwaysFail)
+      expect(noop).toBe(state)
+    }
+
+    state = gameReducer(state, { type: 'REPAIR_ON_PAD', stationId: noGoStation.stationId }, content, alwaysFail)
+    expect(state.launch?.stage).toBe('repair')
+    expect(state.launch?.repairingStationId).toBe(noGoStation.stationId)
+    expect(state.isHardPaused).toBe(false)
+    expect(state.resources.parts).toBe(15) // 30 - 15 repair cost
+  })
+
+  it('REPAIR_ON_PAD is blocked without enough Parts on hand', () => {
+    const content = makeContent() // default 10 parts, repair costs 15
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+    state = completeRollout(state, content, alwaysFail)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+    const noGoStation = state.launch!.stations.find((s) => !s.isGo)!
+
+    const beforeRepair = state
+    state = gameReducer(state, { type: 'REPAIR_ON_PAD', stationId: noGoStation.stationId }, content, alwaysFail)
+    expect(state).toBe(beforeRepair)
+  })
+
+  it('a successful repair returns to go-no-go with that station cleared to go', () => {
+    const base = makeContent()
+    const content = { ...base, startingResources: { ...base.startingResources, parts: 30 } }
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+    state = completeRollout(state, content, alwaysFail)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+    state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+    const noGoStation = state.launch!.stations.find((s) => !s.isGo)!
+
+    state = gameReducer(state, { type: 'REPAIR_ON_PAD', stationId: noGoStation.stationId }, content, alwaysFail)
+    const repairStartDay = state.launch!.transitStartedOnDay!
+    const repairEndDay = state.launch!.transitCompletesOnDay!
+
+    // Low rng() clears the success-chance roll (rng() < chance) — the repair succeeds.
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysFail)
+    for (let day = repairStartDay; day < repairEndDay && state.launch?.stage === 'repair'; day++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysFail)
+    }
+
+    expect(state.launch?.stage).toBe('go-no-go')
+    expect(state.launch?.repairingStationId).toBeNull()
+    expect(state.launch?.transitCompletesOnDay).toBeNull()
+    const repaired = state.launch!.stations.find((s) => s.stationId === noGoStation.stationId)!
+    expect(repaired.isGo).toBe(true)
+    // Back at go-no-go, the administrator needs to decide again — re-hard-paused
+    // just like the first time PROCEED_TO_GO_NO_GO reached this stage.
+    expect(state.isHardPaused).toBe(true)
+    expect(state.speed).toBe('paused')
+
+    // Go/no-go can now proceed to a clean commit.
+    state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
+    expect(state.launch?.stage).toBe('outcome')
+  })
+
+  it('a failed repair can leave the station no-go, or mishap and cost crew readiness', () => {
+    const base = makeContent()
+    const content = { ...base, startingResources: { ...base.startingResources, parts: 30 } }
+
+    function runRepairTo(stage: 'repair-fails-clean' | 'repair-fails-mishap') {
+      let state = createInitialState(content)
+      state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+      state = completeRollout(state, content, alwaysFail)
+      state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
+      state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
+      const noGoStation = state.launch!.stations.find((s) => !s.isGo)!
+      state = gameReducer(state, { type: 'REPAIR_ON_PAD', stationId: noGoStation.stationId }, content, alwaysFail)
+      const start = state.launch!.transitStartedOnDay!
+      const end = state.launch!.transitCompletesOnDay!
+      // The resolving tick's rng() is called for the daily card-draw check first, then the
+      // success-chance roll, then (only if that failed) the mishap roll — high, high, low
+      // triggers a mishap; a flat high value fails clean with no card drawn either.
+      const resolutionRng = stage === 'repair-fails-mishap' ? sequenceRng([0.9, 0.9, 0.1]) : () => 0.9
+      state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysFail)
+      for (let day = start; day < end && state.launch?.stage === 'repair'; day++) {
+        state = gameReducer(state, { type: 'TICK' }, content, day === end - 1 ? resolutionRng : alwaysFail)
+      }
+      return { state, noGoStation }
+    }
+
+    const clean = runRepairTo('repair-fails-clean')
+    expect(clean.state.launch?.stage).toBe('go-no-go')
+    const cleanStation = clean.state.launch!.stations.find((s) => s.stationId === clean.noGoStation.stationId)!
+    expect(cleanStation.isGo).toBe(false)
+    expect(clean.state.resources.crewReadiness).toBe(70) // unchanged — no mishap
+    expect(clean.state.isHardPaused).toBe(true) // back at go-no-go — hard-paused again either way
+
+    const mishap = runRepairTo('repair-fails-mishap')
+    expect(mishap.state.launch?.stage).toBe('go-no-go')
+    const mishapStation = mishap.state.launch!.stations.find((s) => s.stationId === mishap.noGoStation.stationId)!
+    expect(mishapStation.isGo).toBe(false)
+    expect(mishap.state.resources.crewReadiness).toBe(58) // 70 - 12 mishap penalty
+    expect(mishap.state.isHardPaused).toBe(true)
   })
 })
 

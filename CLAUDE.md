@@ -41,10 +41,19 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
   stations (with per-station reasoning and override) → outcome — for one
   site (Cape Canaveral). Rollout and rollback (after a scrub) are timed
   crawler transit, clock running, not hard-paused; Crawler Tier II halves
-  both. The **only** hard pause is `PROCEED_TO_GO_NO_GO`, per CLAUDE.md.
-  `SCRUB_LAUNCH` no longer clears the launch outright — it sends the
-  vehicle into rollback, and the launch only clears once the crawler is
-  back at the VAB, free to try again.
+  both. The clock hard-pauses whenever a launch is sitting at go/no-go
+  awaiting a decision — first via `PROCEED_TO_GO_NO_GO`, and again if a
+  repair attempt (below) returns the launch to go/no-go. `SCRUB_LAUNCH` no
+  longer clears the launch outright — it sends the vehicle into rollback,
+  and the launch only clears once the crawler is back at the VAB, free to
+  try again. At go/no-go, a no-go station also offers **Repair on Pad** as
+  a third option alongside Override/Scrub: pays a Parts cost, takes 2
+  sim-days (clock running, not hard-paused, like rollout/rollback) with the
+  crawler shown parked at the pad, then resolves — success flips the
+  station to go, failure leaves it no-go, and a failure can (lower-odds)
+  mishap into a crew-readiness penalty on top. Pad Tier and Mission Control
+  Tier both improve the odds. Faster than a full scrub-rollback-then-relaunch
+  round trip, but genuinely risky, matching the original design brief.
 - Milestone chain: 5 Horizon missions, prerequisite- and tech-gated.
 - Decision cards: 28-card pool, `severity: flag|pause`, a `department` tag
   (5 desks), optional deadline with auto-resolve-on-expiry.
@@ -97,7 +106,9 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
   on the crawlerway with its position/heading computed directly from
   `launch.transitStartedOnDay`/`transitCompletesOnDay` each render — not a
   separate timed animation — so it's always exactly where the sim says it
-  is; a CSS transition just smooths the jump between ticks.
+  is; a CSS transition just smooths the jump between ticks. During an
+  on-pad repair the crawler stays parked at the pad (same as weather/
+  go-no-go/outcome) rather than moving — there's nowhere for it to go yet.
 - Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
   chance.
 - Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,
@@ -122,17 +133,16 @@ detail):
 - Cloud sync for saves.
 - Rival program(s), contractors with loyalty, administrations, alt-history
   forks, partnership missions (Phase 3).
-- Map stages still ahead (agreed sequence): (4) on-pad repair — a risky
-  alternative to rollback when a go/no-go station is no-go (saves the
-  round-trip time, real mishap chance); later, launch plume/mishap/event
-  animations and recovery ops. Stages (2) building life and (3) crawler
-  rollout/rollback are done — see Implementation Status above.
+- Map stages still ahead: launch plume/mishap/event animations, recovery
+  ops — no agreed sequence yet. Stages (2) building life, (3) crawler
+  rollout/rollback, and (4) on-pad repair are done — see Implementation
+  Status above.
 - A message-center / command-center alternate view of the alert queue.
 - The full fueling-window hold-clock tension in the launch sequence — still
   simplified to weather check → go/no-go → outcome, not the staged 6-step
   sequence with a countdown-style fueling window described below.
 
-As of the last update here: 80 tests passing, `npm run build` /
+As of the last update here: 84 tests passing, `npm run build` /
 `npm run lint` / `npx cap sync ios` all clean, history fully pushed to
 `origin/main`.
 

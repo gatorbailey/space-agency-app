@@ -148,8 +148,8 @@ function crawlerProgress(state: GameState): number | null {
     const frac = total > 0 ? Math.min(1, Math.max(0, elapsed / total)) : 1
     return 1 - frac
   }
-  // Parked at the pad while it's actually there to be launched or scrubbed.
-  if (launch.stage === 'weather' || launch.stage === 'go-no-go' || launch.stage === 'outcome') return 1
+  // Parked at the pad while it's actually there to be launched, scrubbed, or repaired.
+  if (launch.stage === 'weather' || launch.stage === 'go-no-go' || launch.stage === 'outcome' || launch.stage === 'repair') return 1
   return null
 }
 

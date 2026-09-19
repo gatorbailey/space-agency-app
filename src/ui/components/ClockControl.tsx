@@ -50,10 +50,14 @@ export function ClockControl() {
         </span>
       )}
 
-      {state.launch && (state.launch.stage === 'rollout' || state.launch.stage === 'rollback') && (
+      {state.launch && (state.launch.stage === 'rollout' || state.launch.stage === 'rollback' || state.launch.stage === 'repair') && (
         <span className="self-start rounded bg-amber-900/60 px-2 py-1 text-xs font-semibold text-amber-300">
-          {state.launch.stage === 'rollout' ? 'Rolling out to the pad' : 'Returning to the VAB'} —{' '}
-          {Math.max(0, (state.launch.transitCompletesOnDay ?? state.day) - state.day)}d
+          {state.launch.stage === 'rollout'
+            ? 'Rolling out to the pad'
+            : state.launch.stage === 'rollback'
+              ? 'Returning to the VAB'
+              : 'Repair crew working the pad'}{' '}
+          — {Math.max(0, (state.launch.transitCompletesOnDay ?? state.day) - state.day)}d
         </span>
       )}
     </div>

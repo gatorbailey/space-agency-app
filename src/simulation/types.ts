@@ -168,11 +168,12 @@ export interface LaunchPlan {
 }
 
 /**
- * 'rollout' and 'rollback' are crawler transit — the clock keeps running,
- * per CLAUDE.md's "a scheduled launch reaching its go/no-go window is a
- * hard pause" (the ONLY hard pause; rollout/weather/rollback all flow).
+ * 'rollout', 'rollback', and 'repair' all flow with the clock running, per
+ * CLAUDE.md's "a scheduled launch reaching its go/no-go window is a hard
+ * pause" (the ONLY hard pause). 'repair' is a timed detour off 'go-no-go':
+ * attempt a fix on the pad instead of scrubbing, then return to 'go-no-go'.
  */
-export type LaunchStage = 'rollout' | 'weather' | 'go-no-go' | 'outcome' | 'rollback'
+export type LaunchStage = 'rollout' | 'weather' | 'go-no-go' | 'outcome' | 'rollback' | 'repair'
 
 export interface WeatherCheck {
   temperatureF: number
@@ -204,9 +205,15 @@ export interface LaunchSequenceState {
   outcome: 'success' | 'failure' | 'scrubbed' | null
   /** Set once an outcome is resolved, if the assigned astronaut was lost. */
   astronautLost: boolean
-  /** Set only during 'rollout'/'rollback' — the crawler's transit window. */
+  /**
+   * Set during 'rollout'/'rollback' (the crawler's transit window) or
+   * 'repair' (an on-pad fix attempt) — one shared timer field for whichever
+   * timed, non-blocking activity the launch is currently in.
+   */
   transitStartedOnDay: number | null
   transitCompletesOnDay: number | null
+  /** Set only during 'repair' — which no-go station is being worked on. */
+  repairingStationId: string | null
 }
 
 export interface Headline {
@@ -365,6 +372,7 @@ export type GameAction =
   | { type: 'SCRUB_LAUNCH' }
   | { type: 'PROCEED_TO_GO_NO_GO' }
   | { type: 'OVERRIDE_STATION'; stationId: string }
+  | { type: 'REPAIR_ON_PAD'; stationId: string }
   | { type: 'COMMIT_LAUNCH' }
   | { type: 'ACKNOWLEDGE_OUTCOME' }
   | { type: 'PROMOTE_ASTRONAUT'; astronautId: string }

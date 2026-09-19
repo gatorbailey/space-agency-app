@@ -74,6 +74,7 @@ function padStatus(state: GameState, missionName: string): string {
   const stage = state.launch?.stage
   if (stage === 'rollout') return `${missionName} is en route from the VAB — arriving in ${daysLeft(state)}d.`
   if (stage === 'rollback') return `${missionName} scrubbed and is rolling back to the VAB — ${daysLeft(state)}d left.`
+  if (stage === 'repair') return `Ground crew is attempting an on-pad repair — ${daysLeft(state)}d left.`
   return `${missionName} is on the pad, in its launch sequence.`
 }
 

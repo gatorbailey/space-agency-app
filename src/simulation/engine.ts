@@ -54,6 +54,26 @@ function crawlerTransitDays(unlockedTech: string[]): number {
   return Math.max(1, Math.round(days))
 }
 
+/**
+ * On-pad repair: a shorter detour than the scrub-rollback-then-relaunch
+ * round trip, but not guaranteed — and a botched attempt can make things
+ * worse instead of just leaving the station no-go.
+ */
+const REPAIR_DAYS = 2
+const REPAIR_PARTS_COST = 15
+const REPAIR_BASE_SUCCESS_CHANCE = 0.55
+const REPAIR_PAD_TIER_SUCCESS_BONUS = 0.15
+const REPAIR_MISSION_CONTROL_SUCCESS_BONUS = 0.1
+const REPAIR_MISHAP_CHANCE = 0.2
+const REPAIR_MISHAP_EFFECTS: ResourceDelta = { crewReadiness: -12 }
+
+function repairSuccessChance(unlockedTech: string[]): number {
+  let chance = REPAIR_BASE_SUCCESS_CHANCE
+  if (hasTech(unlockedTech, TECH_IDS.padTier)) chance += REPAIR_PAD_TIER_SUCCESS_BONUS
+  if (hasTech(unlockedTech, TECH_IDS.missionControlTier)) chance += REPAIR_MISSION_CONTROL_SUCCESS_BONUS
+  return Math.min(0.95, chance)
+}
+
 /** Life Support halves the crew-readiness cost of a failed mission. */
 function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): ResourceDelta {
   if (!hasTech(unlockedTech, TECH_IDS.lifeSupport) || effects.crewReadiness === undefined) return effects
@@ -231,9 +251,12 @@ export function gameReducer(
 
       // Crawler transit: rollout carries the vehicle to the pad before the
       // weather check; rollback (after a scrub) carries it back to the VAB
-      // and closes the launch out, free to try again. Neither is hard-paused
-      // — only PROCEED_TO_GO_NO_GO stops the clock.
+      // and closes the launch out, free to try again. On-pad repair is a
+      // shorter detour off go-no-go — same idea, resolved with a dice roll
+      // instead of just arriving. None of these are hard-paused — only
+      // PROCEED_TO_GO_NO_GO stops the clock.
       let launch = state.launch
+      let repairJustResolved = false
       if (launch?.stage === 'rollout' && launch.transitCompletesOnDay !== null && day >= launch.transitCompletesOnDay) {
         launch = { ...launch, stage: 'weather', transitStartedOnDay: null, transitCompletesOnDay: null }
       } else if (
@@ -242,6 +265,31 @@ export function gameReducer(
         day >= launch.transitCompletesOnDay
       ) {
         launch = null
+      } else if (launch?.stage === 'repair' && launch.transitCompletesOnDay !== null && day >= launch.transitCompletesOnDay) {
+        repairJustResolved = true
+        const stationId = launch.repairingStationId
+        const succeeded = rng() < repairSuccessChance(unlockedTech)
+        const mishap = !succeeded && rng() < REPAIR_MISHAP_CHANCE
+        if (mishap) resources = applyDelta(resources, REPAIR_MISHAP_EFFECTS)
+        launch = {
+          ...launch,
+          stage: 'go-no-go',
+          repairingStationId: null,
+          transitStartedOnDay: null,
+          transitCompletesOnDay: null,
+          stations: launch.stations.map((s) =>
+            s.stationId !== stationId
+              ? s
+              : succeeded
+                ? { ...s, isGo: true, reasoning: 'Ground crew resolved the issue during an on-pad repair.' }
+                : {
+                    ...s,
+                    reasoning: mishap
+                      ? `${s.reasoning} A rushed repair attempt made it worse — ground crew readiness took a hit.`
+                      : `${s.reasoning} An on-pad repair attempt didn't fix it.`,
+                  },
+          ),
+        }
       }
 
       return {
@@ -261,9 +309,13 @@ export function gameReducer(
         lastExpiredCard,
         lastBudgetCycleDay,
         lastAppropriation,
-        // 'flag' cards queue in the status menu without interrupting the
-        // clock; only a 'pause' card (rare/urgent) stops time outright.
-        speed: drawnCardSeverity === 'pause' ? 'paused' : state.speed,
+        // A repair's resolution puts the launch back at go-no-go — the
+        // administrator needs to decide again, so this re-hard-pauses just
+        // like PROCEED_TO_GO_NO_GO did the first time. Otherwise, 'flag'
+        // cards queue in the status menu without interrupting the clock;
+        // only a 'pause' card (rare/urgent) stops time outright.
+        isHardPaused: repairJustResolved || state.isHardPaused,
+        speed: repairJustResolved || drawnCardSeverity === 'pause' ? 'paused' : state.speed,
       }
     }
 
@@ -382,6 +434,7 @@ export function gameReducer(
           astronautLost: false,
           transitStartedOnDay: state.day,
           transitCompletesOnDay: state.day + transitDays,
+          repairingStationId: null,
         },
       }
     }
@@ -432,6 +485,26 @@ export function gameReducer(
           stations: state.launch.stations.map((s) =>
             s.stationId === action.stationId ? { ...s, overridden: true } : s,
           ),
+        },
+      }
+    }
+
+    case 'REPAIR_ON_PAD': {
+      const launch = state.launch
+      if (!launch || launch.stage !== 'go-no-go') return state
+      const station = launch.stations.find((s) => s.stationId === action.stationId)
+      if (!station || station.isGo || station.overridden) return state
+      if (!canAfford(state.resources, { parts: -REPAIR_PARTS_COST })) return state
+      return {
+        ...state,
+        isHardPaused: false,
+        resources: applyDelta(state.resources, { parts: -REPAIR_PARTS_COST }),
+        launch: {
+          ...launch,
+          stage: 'repair',
+          repairingStationId: action.stationId,
+          transitStartedOnDay: state.day,
+          transitCompletesOnDay: state.day + REPAIR_DAYS,
         },
       }
     }
