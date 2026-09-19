@@ -59,14 +59,26 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
   front, then a per-node day timer runs. Two project lanes, one slot each:
   Knowledge is R&D-Lab research; Infrastructure/Security/Fabrication share
   the site construction crew.
-- **Site map is the primary view** (`src/ui/map`): a stylized SVG site
-  plan of 12 buildings drawn in code (`BuildingArt.tsx`), laid out by
-  `src/content/buildings.ts`. Tapping a building opens a bottom-sheet
-  drawer housing that system's existing panel; infrastructure tiers appear
-  as "Upgrades" inside the building they improve. Department badges route
-  flagged cards to their building; buildings at work glow with a work ring
-  (sky for research, amber for construction); Tier II changes the
-  silhouette. A List toggle keeps the old stacked-panel view reachable.
+- **Site map is the primary view** (`src/ui/map`), drawn in an oblique
+  ("2.5D") style — each building is a front face + roof + side face lit
+  consistently (roof brightest, front medium, side darkest) with a ground
+  shadow, not a flat top-down icon. Terrain in `SiteMap.tsx` is a tall
+  peninsula (grass + beach fringe, a guaranteed-safe interior corridor for
+  placing buildings without water-overlap, water with ripple decoration,
+  scattered trees, a crawlerway road) sized for a scrolling phone screen;
+  the 12 buildings from `src/content/buildings.ts` are staggered left/right
+  down it, not gridded. Tapping a building opens a bottom-sheet drawer
+  housing that system's existing panel; infrastructure tiers appear as
+  "Upgrades" inside the building they improve, changing its silhouette.
+  Flagged cards pop a small bubble above their building instead of a
+  corner badge; buildings at work glow with a dashed work ring (sky for
+  research, amber for construction). An empty dashed "Future Site" lot is
+  reserved on the map for the second-site backlog item — decorative only,
+  nothing unlocks it yet. A List toggle keeps the old stacked-panel view
+  reachable. The building art (`BuildingArt.tsx`) and terrain went through
+  two rounds of user feedback (proportions/shadow/overlap, then a fully
+  linear layout) before landing here — worth knowing if either needs
+  further real-world-reference passes (actual Cape Canaveral geometry).
 - Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
   chance.
 - Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,

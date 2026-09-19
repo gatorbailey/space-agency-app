@@ -31,6 +31,16 @@
   }
 }
 
+@keyframes sa-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
 .sa-beacon {
   animation: sa-blink 1.6s ease-in-out infinite;
 }
@@ -44,10 +54,17 @@
   animation: sa-glow 2s ease-in-out infinite;
 }
 
+.sa-bubble {
+  animation: sa-bob 2.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sa-beacon,
   .sa-work-ring,
-  .sa-glow {
+  .sa-glow,
+  .sa-bubble {
     animation: none;
   }
 }
