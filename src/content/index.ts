@@ -53,3 +53,5 @@ export {
   WEATHER_PROFILE,
 }
 export { SITE_NAME } from './site'
+export { BUILDINGS, MAP_HEIGHT, MAP_WIDTH, findBuilding } from './buildings'
+export type { BuildingDef, BuildingId, BuildingKind } from './buildings'

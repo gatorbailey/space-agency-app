@@ -47,12 +47,26 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
 - Astronaut roster: capped active roster + reserve corps, promote/demote,
   6 skills used live during launch resolution.
 - Both press outlets, generating headlines after every mission.
-- Knowledge tech tree (Propulsion Chemical/Exotic, Life Support, Materials
-  Science, Avionics/Computing) + Infrastructure tech tree (Pad, VAB, Fueling
-  Depot, Crawler, Mission Control, Training Center, R&D Lab tiers) — 11
-  nodes total. **Research takes real time**: cost is paid up front, then a
-  per-node day timer runs before it unlocks; the R&D Lab works one project
-  at a time.
+- Four tech branches, 22 nodes: Knowledge (Propulsion Chemical/Exotic,
+  Life Support, Materials Science, Avionics/Computing), Infrastructure
+  (Pad, VAB, Fueling Depot, Crawler, Mission Control, Training Center, R&D
+  Lab tiers), Security (fencing → patrols → vehicles / astronaut detail →
+  perimeter defense; patrols and vehicles hook tour mishap chance/severity,
+  the rest are flags the future threat system reads), and Fabrication
+  (welding → plasma welding / machine shop → clean room / assembly line →
+  robotics; effects land on facility rates, Assembly Line speeds every
+  construction project). **Research takes real time**: cost is paid up
+  front, then a per-node day timer runs. Two project lanes, one slot each:
+  Knowledge is R&D-Lab research; Infrastructure/Security/Fabrication share
+  the site construction crew.
+- **Site map is the primary view** (`src/ui/map`): a stylized SVG site
+  plan of 12 buildings drawn in code (`BuildingArt.tsx`), laid out by
+  `src/content/buildings.ts`. Tapping a building opens a bottom-sheet
+  drawer housing that system's existing panel; infrastructure tiers appear
+  as "Upgrades" inside the building they improve. Department badges route
+  flagged cards to their building; buildings at work glow with a work ring
+  (sky for research, amber for construction); Tier II changes the
+  silhouette. A List toggle keeps the old stacked-panel view reachable.
 - Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
   chance.
 - Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,
@@ -77,14 +91,19 @@ detail):
 - Cloud sync for saves.
 - Rival program(s), contractors with loyalty, administrations, alt-history
   forks, partnership missions (Phase 3).
-- The graphic site map with building-grouped alerts, a message-center/
-  command-center alternate view, and multiple concurrent view modes —
-  explicitly scoped out of every build stage so far as future work.
+- Map stages still ahead (agreed sequence): (2) building life — activity
+  animations and ambient site traffic that follows clock speed; (3) crawler
+  rollout/rollback as a real sim mechanic — a `rollout` stage before the
+  weather check with the clock running, `rollback` after a scrub, Crawler
+  Tier II shortening both, the crawler physically moving VAB → pad and back;
+  (4) on-pad repair as a risky alternative to rollback; later, launch
+  plume/mishap/event animations and recovery ops.
+- A message-center / command-center alternate view of the alert queue.
 - The full fueling-window hold-clock tension in the launch sequence — still
   simplified to weather check → go/no-go → outcome, not the staged 6-step
   sequence with a countdown-style fueling window described below.
 
-As of the last update here: 69 tests passing, `npm run build` /
+As of the last update here: 75 tests passing, `npm run build` /
 `npm run lint` / `npx cap sync ios` all clean, history fully pushed to
 `origin/main`.
 

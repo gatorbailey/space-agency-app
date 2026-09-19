@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CARD_POOL } from './content'
+import type { BuildingId } from './content'
 import { AstronautRoster } from './ui/components/AstronautRoster'
 import { BudgetOffice } from './ui/components/BudgetOffice'
 import { ClockControl } from './ui/components/ClockControl'
@@ -13,7 +14,11 @@ import { SiteTours } from './ui/components/SiteTours'
 import { StatusMenu } from './ui/components/StatusMenu'
 import { TechTree } from './ui/components/TechTree'
 import { GameProvider } from './ui/GameContext'
+import { BuildingDrawer } from './ui/map/BuildingDrawer'
+import { SiteMap } from './ui/map/SiteMap'
 import { useGame } from './ui/useGame'
+
+type View = 'map' | 'list'
 
 function App() {
   return (
@@ -26,9 +31,11 @@ function App() {
 function AppShell() {
   const { state } = useGame()
   const [openCardId, setOpenCardId] = useState<string | null>(null)
+  const [view, setView] = useState<View>('map')
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | null>(null)
 
   // A 'pause' card is urgent and always wins the modal; 'flag' cards only
-  // show when picked from the status menu.
+  // show when picked from the status menu or a building.
   const urgentCard = state.activeCards
     .map((active) => CARD_POOL.find((c) => c.id === active.cardId))
     .find((def) => def?.severity === 'pause')
@@ -40,23 +47,48 @@ function AppShell() {
       <header>
         <div className="flex items-center justify-between px-4 pt-4">
           <h1 className="text-xl font-bold tracking-tight">Space Agency</h1>
-          <StatusMenu onSelectCard={setOpenCardId} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setView((v) => (v === 'map' ? 'list' : 'map'))}
+              className="rounded-full bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700"
+            >
+              {view === 'map' ? 'List' : 'Map'}
+            </button>
+            <StatusMenu onSelectCard={setOpenCardId} />
+          </div>
         </div>
         <ResourceBar />
         <ClockControl />
       </header>
 
-      <main className="flex flex-1 flex-col gap-4 px-4 py-4">
-        <BudgetOffice />
-        <MilestoneList />
-        <MaterialsPanel />
-        <SiteTours />
-        <TechTree />
-        <AstronautRoster />
-      </main>
+      {view === 'map' ? (
+        <main className="flex flex-1 flex-col">
+          <SiteMap selectedId={selectedBuilding} onSelect={setSelectedBuilding} />
+          <HeadlineFeed limit={1} />
+        </main>
+      ) : (
+        <>
+          <main className="flex flex-1 flex-col gap-4 px-4 py-4">
+            <BudgetOffice />
+            <MilestoneList />
+            <MaterialsPanel />
+            <SiteTours />
+            <TechTree />
+            <AstronautRoster />
+          </main>
+          <HeadlineFeed />
+        </>
+      )}
 
-      <HeadlineFeed />
-
+      <BuildingDrawer
+        buildingId={view === 'map' ? selectedBuilding : null}
+        onClose={() => setSelectedBuilding(null)}
+        onSelectCard={(cardId) => {
+          setOpenCardId(cardId)
+          setSelectedBuilding(null)
+        }}
+      />
       <DecisionCardModal cardId={displayedCardId ?? null} dismissible={!urgentCard} onClose={() => setOpenCardId(null)} />
       <LaunchSequenceModal />
     </div>

@@ -1160,6 +1160,110 @@ function rngSequence(values: number[]): () => number {
   return () => values[Math.min(i++, values.length - 1)]
 }
 
+describe('research lanes', () => {
+  it('a knowledge project and a construction project can run at the same time', () => {
+    const content = makeContent({
+      techTree: [
+        { id: 'lab-node', name: 'Lab', description: '', category: 'knowledge', cost: {}, researchDays: 3 },
+        { id: 'site-node', name: 'Site', description: '', category: 'infrastructure', cost: {}, researchDays: 3 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'lab-node' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'site-node' }, content, alwaysGo)
+    expect(state.activeResearch?.techId).toBe('lab-node')
+    expect(state.activeConstruction?.techId).toBe('site-node')
+
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 3; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.unlockedTech).toEqual(expect.arrayContaining(['lab-node', 'site-node']))
+    expect(state.activeResearch).toBeNull()
+    expect(state.activeConstruction).toBeNull()
+  })
+
+  it('security and fabrication work share the single construction slot', () => {
+    const content = makeContent({
+      techTree: [
+        { id: 'fence', name: 'Fence', description: '', category: 'security', cost: {}, researchDays: 5 },
+        { id: 'welding', name: 'Welding', description: '', category: 'fabrication', cost: {}, researchDays: 5 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'fence' }, content, alwaysGo)
+    const next = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'welding' }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('Assembly Line shortens later construction projects by 25%, but not lab research', () => {
+    const content = makeContent({
+      techTree: [
+        { id: 'site-node', name: 'Site', description: '', category: 'infrastructure', cost: {}, researchDays: 8 },
+        { id: 'lab-node', name: 'Lab', description: '', category: 'knowledge', cost: {}, researchDays: 8 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = { ...state, unlockedTech: [TECH_IDS.fabAssemblyLine] }
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'site-node' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: 'lab-node' }, content, alwaysGo)
+    expect(state.activeConstruction?.completesOnDay).toBe(6) // round(8 * 0.75)
+    expect(state.activeResearch?.completesOnDay).toBe(8)
+  })
+
+  it('Precision Welding Shop raises the daily Parts rate once built', () => {
+    const content = makeContent({
+      techTree: [
+        { id: TECH_IDS.fabWelding, name: 'Welding', description: '', category: 'fabrication', cost: {}, researchDays: 2 },
+      ],
+    })
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'RESEARCH_TECH', techId: TECH_IDS.fabWelding }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, alwaysGo)
+    for (let i = 0; i < 2; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.facility.partsPerDay).toBe(7) // base 5 + 2
+  })
+})
+
+describe('site security', () => {
+  const guardedTour: TourDef = {
+    type: 'public',
+    name: 'Public',
+    description: '',
+    cost: {},
+    cooldownDays: 1,
+    sentimentGain: 3,
+    mishapChance: 0.3,
+    mishapSentimentPenalty: 6,
+    successFlavor: ['fine'],
+    mishapFlavor: ['oops'],
+  }
+
+  it('Site Patrol Unit halves the tour mishap chance', () => {
+    const content = makeContent({ tours: [guardedTour] })
+    const rng = () => 0.2 // below the base 0.3, above the patrolled 0.15
+    const unguarded = gameReducer(createInitialState(content), { type: 'HOST_TOUR', tourType: 'public' }, content, rng)
+    expect(unguarded.lastTourOutcome?.mishap).toBe(true)
+
+    let state = createInitialState(content)
+    state = { ...state, unlockedTech: [TECH_IDS.securityPatrols] }
+    const guarded = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, rng)
+    expect(guarded.lastTourOutcome?.mishap).toBe(false)
+  })
+
+  it('Patrol Vehicles halve the Sentiment penalty of a mishap that still happens', () => {
+    const content = makeContent({ tours: [guardedTour] })
+    const rng = () => 0.1
+    let state = createInitialState(content)
+    state = { ...state, unlockedTech: [TECH_IDS.securityVehicles] }
+    state = gameReducer(state, { type: 'HOST_TOUR', tourType: 'public' }, content, rng)
+    expect(state.lastTourOutcome?.mishap).toBe(true)
+    expect(state.resources.sentiment).toBe(47) // 50 - round(6 * 0.5)
+  })
+})
+
 describe('site tours', () => {
   const testTour: TourDef = {
     type: 'public',

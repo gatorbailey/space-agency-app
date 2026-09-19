@@ -1,6 +1,6 @@
 import { useGame } from '../useGame'
 
-export function HeadlineFeed() {
+export function HeadlineFeed({ limit = 6 }: { limit?: number }) {
   const { state } = useGame()
   if (state.headlines.length === 0) return null
 
@@ -10,7 +10,7 @@ export function HeadlineFeed() {
       <ul className="mt-2 flex flex-col gap-1.5">
         {[...state.headlines]
           .reverse()
-          .slice(0, 6)
+          .slice(0, limit)
           .map((headline) => (
             <li key={headline.id} className="text-sm text-slate-300">
               <span

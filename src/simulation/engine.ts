@@ -4,7 +4,7 @@ import { evaluateStation, resolveOutcome, rollWeather, wasAvoidableRisk } from '
 import { generateHeadlines } from './press'
 import { applyDelta, canAfford } from './resources'
 import { demoteAstronaut, findAstronaut, markDeceased, promoteAstronaut } from './roster'
-import { hasTech, TECH_IDS } from './tech'
+import { hasTech, laneForCategory, TECH_IDS } from './tech'
 import { isTourOnCooldown, resolveTour } from './tours'
 import { canProcure, procure } from './materials'
 import { applyOpsEffect, dailyOpsCost, dailyOpsEffect } from './ops'
@@ -32,17 +32,33 @@ const FUELING_DEPOT_STORAGE_BONUS = 20
 /** Life Support halves the crew-readiness penalty from a failed mission. */
 const LIFE_SUPPORT_FAILURE_MULTIPLIER = 0.5
 
+/** Fabrication Facility machinery, applied to the same facility rates Materials Processing and the lab use. */
+const FAB_WELDING_PARTS_BONUS = 2
+const FAB_PLASMA_FUEL_BONUS = 2
+const FAB_MACHINE_SHOP_STORAGE_BONUS = 20
+const FAB_CLEAN_ROOM_RD_BONUS = 2
+const FAB_ROBOTICS_PARTS_BONUS = 3
+const FAB_ROBOTICS_FUEL_BONUS = 1
+
+/** The Assembly Line makes every later construction project finish faster. */
+const ASSEMBLY_LINE_CONSTRUCTION_MULTIPLIER = 0.75
+
 /** Life Support halves the crew-readiness cost of a failed mission. */
 function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): ResourceDelta {
   if (!hasTech(unlockedTech, TECH_IDS.lifeSupport) || effects.crewReadiness === undefined) return effects
   return { ...effects, crewReadiness: Math.round(effects.crewReadiness * LIFE_SUPPORT_FAILURE_MULTIPLIER) }
 }
 
-/** Facility upgrades some tech nodes grant, applied once at research time. */
+/** Facility upgrades some tech nodes grant, applied once when the node completes. */
 const FACILITY_BONUSES: Partial<Record<string, Partial<FacilityState>>> = {
   [TECH_IDS.materialsScience]: { partsPerDay: MATERIALS_SCIENCE_BONUS },
   [TECH_IDS.fuelingDepotTier]: { fuelStorageCap: FUELING_DEPOT_STORAGE_BONUS },
   [TECH_IDS.rdLabTier]: { rdPerDay: RD_LAB_TIER_BONUS },
+  [TECH_IDS.fabWelding]: { partsPerDay: FAB_WELDING_PARTS_BONUS },
+  [TECH_IDS.fabPlasmaWelding]: { fuelPerDay: FAB_PLASMA_FUEL_BONUS },
+  [TECH_IDS.fabMachineShop]: { partsStorageCap: FAB_MACHINE_SHOP_STORAGE_BONUS },
+  [TECH_IDS.fabCleanRoom]: { rdPerDay: FAB_CLEAN_ROOM_RD_BONUS },
+  [TECH_IDS.fabRobotics]: { partsPerDay: FAB_ROBOTICS_PARTS_BONUS, fuelPerDay: FAB_ROBOTICS_FUEL_BONUS },
 }
 
 function applyFacilityBonus(facility: FacilityState, techId: string): FacilityState {
@@ -79,6 +95,7 @@ export function createInitialState(content: GameContent): GameState {
     pendingRD: 0,
     unlockedTech: [],
     activeResearch: null,
+    activeConstruction: null,
     activeCards: [],
     resolvedCards: {},
     launch: null,
@@ -181,20 +198,24 @@ export function gameReducer(
         pendingRD = applied.pendingRD
       }
 
-      // The R&D Lab works one project at a time; cost was already paid when
-      // research began, so completion just unlocks it and applies its
-      // facility/bonus effects.
+      // Each lane (R&D Lab research, site construction crew) works one
+      // project at a time; cost was paid when it began, so completion just
+      // unlocks the node and applies its facility/bonus effects.
       let activeResearch = state.activeResearch
+      let activeConstruction = state.activeConstruction
       let unlockedTech = state.unlockedTech
-      if (activeResearch && day >= activeResearch.completesOnDay) {
-        const node = content.techTree.find((t) => t.id === activeResearch?.techId)
+      for (const lane of ['research', 'construction'] as const) {
+        const project = lane === 'research' ? activeResearch : activeConstruction
+        if (!project || day < project.completesOnDay) continue
+        const node = content.techTree.find((t) => t.id === project.techId)
         if (node) {
           const completed = completeResearch({ resources, facility, unlockedTech }, node)
           resources = completed.resources
           facility = completed.facility
           unlockedTech = completed.unlockedTech
         }
-        activeResearch = null
+        if (lane === 'research') activeResearch = null
+        else activeConstruction = null
       }
 
       return {
@@ -208,6 +229,7 @@ export function gameReducer(
         resources,
         facility,
         activeResearch,
+        activeConstruction,
         unlockedTech,
         lastExpiredCard,
         lastBudgetCycleDay,
@@ -270,13 +292,20 @@ export function gameReducer(
       const node = content.techTree.find((t) => t.id === action.techId)
       if (!node) return state
       if (state.unlockedTech.includes(node.id)) return state
-      if (state.activeResearch) return state // the R&D Lab works one project at a time
+      const lane = laneForCategory(node.category)
+      const slot = lane === 'research' ? state.activeResearch : state.activeConstruction
+      if (slot) return state // each lane works one project at a time
       if (node.requiresTechId && !state.unlockedTech.includes(node.requiresTechId)) return state
       if (!canAfford(state.resources, node.cost)) return state
+      const days =
+        lane === 'construction' && hasTech(state.unlockedTech, TECH_IDS.fabAssemblyLine)
+          ? Math.max(1, Math.round(node.researchDays * ASSEMBLY_LINE_CONSTRUCTION_MULTIPLIER))
+          : node.researchDays
+      const project = { techId: node.id, startedOnDay: state.day, completesOnDay: state.day + days }
       return {
         ...state,
         resources: applyDelta(state.resources, node.cost),
-        activeResearch: { techId: node.id, startedOnDay: state.day, completesOnDay: state.day + node.researchDays },
+        ...(lane === 'research' ? { activeResearch: project } : { activeConstruction: project }),
       }
     }
 
@@ -438,7 +467,7 @@ export function gameReducer(
       if (isTourOnCooldown(tourDef, state.day, state.lastTourDay[tourDef.type])) return state
       if (!canAfford(state.resources, tourDef.cost)) return state
 
-      const { resourceDelta, outcome } = resolveTour(tourDef, state.day, rng)
+      const { resourceDelta, outcome } = resolveTour(tourDef, state.day, rng, state.unlockedTech)
       const resources = applyDelta(applyDelta(state.resources, tourDef.cost), resourceDelta)
 
       return {

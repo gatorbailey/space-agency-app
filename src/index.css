@@ -1,1 +1,53 @@
 @import 'tailwindcss';
+
+/* Site map animation vocabulary. Kept as plain CSS so SVG elements can use
+   it directly; Tailwind's animate-* utilities don't reach into <svg>. */
+@keyframes sa-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes sa-work-ring {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes sa-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.sa-beacon {
+  animation: sa-blink 1.6s ease-in-out infinite;
+}
+
+.sa-work-ring {
+  stroke-dasharray: 6 6;
+  animation: sa-work-ring 1.2s linear infinite;
+}
+
+.sa-glow {
+  animation: sa-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sa-beacon,
+  .sa-work-ring,
+  .sa-glow {
+    animation: none;
+  }
+}

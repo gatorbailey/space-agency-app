@@ -258,11 +258,22 @@ export interface TourOutcome {
   bonusBudget: boolean
 }
 
+/**
+ * Knowledge is R&D-Lab research; the other three are physical work on the
+ * site (infrastructure tiers, the Security Depot's units/defenses, the
+ * Fabrication Facility's machinery) and share the construction crew.
+ */
+export const TECH_CATEGORIES = ['knowledge', 'infrastructure', 'security', 'fabrication'] as const
+export type TechCategory = (typeof TECH_CATEGORIES)[number]
+
+/** Which single-project slot a tech node occupies while in progress. */
+export type TechLane = 'research' | 'construction'
+
 export interface TechNodeDef {
   id: string
   name: string
   description: string
-  category: 'knowledge' | 'infrastructure'
+  category: TechCategory
   /** Deducted from resources up front, when research begins — a negative delta. */
   cost: ResourceDelta
   /** Sim-days the R&D Lab spends on this node after cost is paid, before it unlocks. */
@@ -274,11 +285,11 @@ export interface TechNodeDef {
 }
 
 /**
- * The R&D Lab works one project at a time — cost is paid up front, then the
- * node unlocks researchDays later. Per CLAUDE.md's "tech tree to have a time
- * element needed to unlock after purchasing with R&D."
+ * A tech node in progress — cost is paid up front, then it unlocks
+ * researchDays later. Per CLAUDE.md's "tech tree to have a time element
+ * needed to unlock after purchasing with R&D." Each lane holds one at a time.
  */
-export interface ActiveResearch {
+export interface ActiveProject {
   techId: string
   startedOnDay: number
   completesOnDay: number
@@ -299,8 +310,10 @@ export interface GameState {
   pendingRD: number
   /** Ids of researched knowledge-tech nodes. */
   unlockedTech: string[]
-  /** The one tech node currently being researched, if any — the R&D Lab has a single project slot. */
-  activeResearch: ActiveResearch | null
+  /** Knowledge node in progress at the R&D Lab, if any — one at a time. */
+  activeResearch: ActiveProject | null
+  /** Infrastructure/security/fabrication node in progress with the site construction crew, if any — one at a time. */
+  activeConstruction: ActiveProject | null
   activeCards: ActiveCard[]
   /** Maps card id to the sim day it was last resolved, for cooldown-based redraws. */
   resolvedCards: Record<string, number>

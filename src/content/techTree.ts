@@ -117,4 +117,124 @@ const INFRASTRUCTURE_TECH: TechNodeDef[] = [
   },
 ]
 
-export const TECH_TREE: TechNodeDef[] = [...KNOWLEDGE_TECH, ...INFRASTRUCTURE_TECH]
+/**
+ * Security Depot — units, vehicles, and perimeter defenses. Per CLAUDE.md's
+ * four threat types (trespassers, environmentalists, spies, saboteurs); the
+ * threat system itself is still backlog, so today these nodes carry their
+ * tour-safety and morale effects and act as the flags that system will read.
+ * Note the deliberate tension: visible defenses cost Sentiment.
+ */
+const SECURITY_TECH: TechNodeDef[] = [
+  {
+    id: TECH_IDS.securityFencing,
+    name: 'Perimeter Fencing',
+    description: 'Chain-link, gates, and signage around the pad apron. The first line against the merely curious.',
+    category: 'security',
+    cost: { budget: -1200, parts: -10 },
+    researchDays: 8,
+    bonusEffect: { sentiment: 1 },
+  },
+  {
+    id: TECH_IDS.securityPatrols,
+    name: 'Site Patrol Unit',
+    description: 'A standing guard detail on rotation. Tour mishaps are half as likely with someone watching the LOX farm.',
+    category: 'security',
+    cost: { budget: -1800 },
+    researchDays: 12,
+    requiresTechId: TECH_IDS.securityFencing,
+  },
+  {
+    id: TECH_IDS.securityVehicles,
+    name: 'Patrol Vehicles',
+    description: 'A motor pool for the guard detail. Faster response means a mishap that does happen costs half as much goodwill.',
+    category: 'security',
+    cost: { budget: -1500, parts: -6, fuel: -6 },
+    researchDays: 10,
+    requiresTechId: TECH_IDS.securityPatrols,
+  },
+  {
+    id: TECH_IDS.securityAstronautDetail,
+    name: 'Astronaut Security Detail',
+    description: 'A dedicated escort for the corps on and off site. The crew notices — readiness gets a one-time lift.',
+    category: 'security',
+    cost: { budget: -2200 },
+    researchDays: 14,
+    requiresTechId: TECH_IDS.securityPatrols,
+    bonusEffect: { crewReadiness: 5 },
+  },
+  {
+    id: TECH_IDS.securityPerimeterDefense,
+    name: 'Perimeter Defense Post',
+    description:
+      'Hardened checkpoints and an armed post at the gate. Serious protection against serious threats — and it makes the program look like a military base, which the public notices.',
+    category: 'security',
+    cost: { budget: -4000, parts: -15 },
+    researchDays: 20,
+    requiresTechId: TECH_IDS.securityVehicles,
+    bonusEffect: { sentiment: -4 },
+  },
+]
+
+/**
+ * Fabrication Facility — machinery and methods that raise what the site can
+ * make for itself. Effects land on the facility rates the Materials
+ * Processing plant and R&D Lab already use; the Assembly Line speeds every
+ * construction project after it.
+ */
+const FABRICATION_TECH: TechNodeDef[] = [
+  {
+    id: TECH_IDS.fabWelding,
+    name: 'Precision Welding Shop',
+    description: 'Certified welders and jigs for flight-grade structure. Parts accrue faster on-site.',
+    category: 'fabrication',
+    cost: { budget: -1500, parts: -10 },
+    researchDays: 10,
+  },
+  {
+    id: TECH_IDS.fabPlasmaWelding,
+    name: 'Plasma Arc Welding',
+    description: 'Cryogenic-tank seams that hold. Fuel accrues faster now that tankage is fabricated here.',
+    category: 'fabrication',
+    cost: { budget: -2000, parts: -12 },
+    researchDays: 12,
+    requiresTechId: TECH_IDS.fabWelding,
+  },
+  {
+    id: TECH_IDS.fabMachineShop,
+    name: 'Machine Shop Expansion',
+    description: 'More lathes, more mills, more floor. Raises the Parts storage cap.',
+    category: 'fabrication',
+    cost: { budget: -2500, parts: -15 },
+    researchDays: 14,
+    requiresTechId: TECH_IDS.fabWelding,
+  },
+  {
+    id: TECH_IDS.fabCleanRoom,
+    name: 'Clean Room',
+    description: 'Instrument and payload work that used to be farmed out happens on-site — and feeds the lab. R&D accrues faster.',
+    category: 'fabrication',
+    cost: { budget: -3000, parts: -10, safetyGear: -5 },
+    researchDays: 16,
+    requiresTechId: TECH_IDS.fabMachineShop,
+  },
+  {
+    id: TECH_IDS.fabAssemblyLine,
+    name: 'Assembly Line',
+    description: 'Staged, repeatable build-out instead of one-off jobs. Every construction project completes 25% faster.',
+    category: 'fabrication',
+    cost: { budget: -4000, parts: -20 },
+    researchDays: 18,
+    requiresTechId: TECH_IDS.fabMachineShop,
+  },
+  {
+    id: TECH_IDS.fabRobotics,
+    name: 'Robotics & Automation',
+    description: 'Automated handling and machining across the floor. Parts and Fuel both accrue faster.',
+    category: 'fabrication',
+    cost: { budget: -6000, parts: -25 },
+    researchDays: 24,
+    requiresTechId: TECH_IDS.fabAssemblyLine,
+  },
+]
+
+export const TECH_TREE: TechNodeDef[] = [...KNOWLEDGE_TECH, ...INFRASTRUCTURE_TECH, ...SECURITY_TECH, ...FABRICATION_TECH]
