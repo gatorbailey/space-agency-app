@@ -102,11 +102,28 @@ function doorPoint(building: BuildingDef): [number, number] {
   return [building.x + building.w / 2, building.y + building.h]
 }
 
-const CRAWLERWAY_PATH = (() => {
-  const [vx, vy] = doorPoint(findBuilding('vab'))
-  const [px, py] = SPINE[7]
-  return `M ${vx},${vy} Q ${(vx + px) / 2},${vy + 45} ${px},${py}`
-})()
+const CRAWLERWAY_VAB: [number, number] = doorPoint(findBuilding('vab'))
+const CRAWLERWAY_PAD: [number, number] = SPINE[7]
+const CRAWLERWAY_CONTROL: [number, number] = [
+  (CRAWLERWAY_VAB[0] + CRAWLERWAY_PAD[0]) / 2,
+  CRAWLERWAY_VAB[1] + 45,
+]
+const CRAWLERWAY_PATH = `M ${CRAWLERWAY_VAB[0]},${CRAWLERWAY_VAB[1]} Q ${CRAWLERWAY_CONTROL[0]},${CRAWLERWAY_CONTROL[1]} ${CRAWLERWAY_PAD[0]},${CRAWLERWAY_PAD[1]}`
+
+/** Point along the crawlerway at t∈[0,1] (0 = VAB, 1 = pad) — the quadratic Bezier formula, computed directly from game-day progress rather than looped/timed animation, so it always reflects the launch's actual transit state. */
+function crawlerPointAt(t: number): [number, number] {
+  const mt = 1 - t
+  const x = mt * mt * CRAWLERWAY_VAB[0] + 2 * mt * t * CRAWLERWAY_CONTROL[0] + t * t * CRAWLERWAY_PAD[0]
+  const y = mt * mt * CRAWLERWAY_VAB[1] + 2 * mt * t * CRAWLERWAY_CONTROL[1] + t * t * CRAWLERWAY_PAD[1]
+  return [x, y]
+}
+
+/** Heading in degrees at t, from the Bezier's derivative — orients the crawler along its direction of travel. */
+function crawlerAngleAt(t: number): number {
+  const dx = 2 * (1 - t) * (CRAWLERWAY_CONTROL[0] - CRAWLERWAY_VAB[0]) + 2 * t * (CRAWLERWAY_PAD[0] - CRAWLERWAY_CONTROL[0])
+  const dy = 2 * (1 - t) * (CRAWLERWAY_CONTROL[1] - CRAWLERWAY_VAB[1]) + 2 * t * (CRAWLERWAY_PAD[1] - CRAWLERWAY_CONTROL[1])
+  return (Math.atan2(dy, dx) * 180) / Math.PI
+}
 
 /** Sim-seconds for one lap of the spine, by clock speed — no traffic while paused. */
 const TRAFFIC_LAP_SECONDS: Partial<Record<ClockSpeed, number>> = { normal: 16, fast: 7, faster: 3 }
@@ -116,10 +133,31 @@ interface SiteMapProps {
   onSelect: (id: BuildingId) => void
 }
 
+/** null while there's no vehicle to show on the crawlerway at all. */
+function crawlerProgress(state: GameState): number | null {
+  const launch = state.launch
+  if (!launch) return null
+  if (launch.stage === 'rollout' && launch.transitStartedOnDay !== null && launch.transitCompletesOnDay !== null) {
+    const total = launch.transitCompletesOnDay - launch.transitStartedOnDay
+    const elapsed = state.day - launch.transitStartedOnDay
+    return total > 0 ? Math.min(1, Math.max(0, elapsed / total)) : 1
+  }
+  if (launch.stage === 'rollback' && launch.transitStartedOnDay !== null && launch.transitCompletesOnDay !== null) {
+    const total = launch.transitCompletesOnDay - launch.transitStartedOnDay
+    const elapsed = state.day - launch.transitStartedOnDay
+    const frac = total > 0 ? Math.min(1, Math.max(0, elapsed / total)) : 1
+    return 1 - frac
+  }
+  // Parked at the pad while it's actually there to be launched or scrubbed.
+  if (launch.stage === 'weather' || launch.stage === 'go-no-go' || launch.stage === 'outcome') return 1
+  return null
+}
+
 export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
   const { state } = useGame()
   const badges = flaggedCountsByDepartment(state)
   const trafficLapSeconds = TRAFFIC_LAP_SECONDS[state.speed]
+  const crawlerT = crawlerProgress(state)
 
   return (
     <svg
@@ -166,6 +204,8 @@ export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
       })}
       <path d={CRAWLERWAY_PATH} fill="none" stroke="#1e293b" strokeWidth={12} strokeLinecap="round" />
       <path d={CRAWLERWAY_PATH} fill="none" stroke="#64748b" strokeWidth={1.5} strokeDasharray="7 7" />
+
+      {crawlerT !== null && <Crawler t={crawlerT} />}
 
       {trafficLapSeconds && (
         <g fill="#fbbf24">
@@ -218,6 +258,20 @@ export function SiteMap({ selectedId, onSelect }: SiteMapProps) {
         />
       ))}
     </svg>
+  )
+}
+
+/** The mission vehicle on its crawler-transporter — position/heading derived straight from launch.transitStartedOnDay/transitCompletesOnDay, so it's always exactly where the sim says it is, not a separate animation loop. */
+function Crawler({ t }: { t: number }) {
+  const [cx, cy] = crawlerPointAt(t)
+  const angle = crawlerAngleAt(t)
+  return (
+    <g transform={`translate(${cx} ${cy}) rotate(${angle})`} className="sa-crawler">
+      <rect x={-11} y={-7} width={22} height={14} rx={2} fill="#94a3b8" stroke="#334155" strokeWidth={1.5} />
+      <rect x={-13} y={5} width={7} height={5} fill="#1e293b" />
+      <rect x={6} y={5} width={7} height={5} fill="#1e293b" />
+      <rect x={-5} y={-11} width={9} height={5} fill="#64748b" stroke="#334155" />
+    </g>
   )
 }
 

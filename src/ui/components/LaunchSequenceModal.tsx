@@ -5,7 +5,10 @@ import { useGame } from '../useGame'
 export function LaunchSequenceModal() {
   const { state, dispatch } = useGame()
   const launch = state.launch
-  if (!launch) return null
+  // Rollout/rollback are crawler transit, not a decision point — the clock
+  // keeps running, so this doesn't block the rest of the app. Progress
+  // shows on the site map and in the clock's status banner instead.
+  if (!launch || launch.stage === 'rollout' || launch.stage === 'rollback') return null
 
   const mission = MILESTONES.find((m) => m.id === launch.missionId)
   const blockedByStations = launch.stations.some((s) => !s.isGo && !s.overridden)
@@ -51,7 +54,7 @@ export function LaunchSequenceModal() {
                     onClick={() => dispatch({ type: 'SCRUB_LAUNCH' })}
                     className="rounded border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800"
                   >
-                    Scrub (no cost but time)
+                    Scrub (no cost — crawler rolls back to the VAB)
                   </button>
                 </div>
               </div>
@@ -149,9 +152,11 @@ export function LaunchSequenceModal() {
   )
 }
 
+// Rollout/rollback never reach this indicator — the modal returns null for
+// those stages (see above), so only the three blocking stages show here.
 const STAGES = ['weather', 'go-no-go', 'outcome'] as const
 
-function StageIndicator({ stage }: { stage: (typeof STAGES)[number] | 'complete' }) {
+function StageIndicator({ stage }: { stage: (typeof STAGES)[number] }) {
   return (
     <div className="mt-2 flex gap-2 text-xs text-slate-500">
       {STAGES.map((s, i) => (

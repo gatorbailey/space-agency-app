@@ -91,6 +91,13 @@
   transform-origin: center;
 }
 
+/* Position/heading are computed straight from game state each render (see
+   SiteMap's Crawler component) — this transition just smooths the jump
+   between one tick's position and the next instead of a separate loop. */
+.sa-crawler {
+  transition: transform 0.4s linear;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sa-beacon,
   .sa-work-ring,
@@ -99,5 +106,8 @@
   .sa-sweep,
   .sa-smoke {
     animation: none;
+  }
+  .sa-crawler {
+    transition: none;
   }
 }

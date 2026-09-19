@@ -167,7 +167,12 @@ export interface LaunchPlan {
   riskThreshold: number
 }
 
-export type LaunchStage = 'weather' | 'go-no-go' | 'outcome' | 'complete'
+/**
+ * 'rollout' and 'rollback' are crawler transit — the clock keeps running,
+ * per CLAUDE.md's "a scheduled launch reaching its go/no-go window is a
+ * hard pause" (the ONLY hard pause; rollout/weather/rollback all flow).
+ */
+export type LaunchStage = 'rollout' | 'weather' | 'go-no-go' | 'outcome' | 'rollback'
 
 export interface WeatherCheck {
   temperatureF: number
@@ -199,6 +204,9 @@ export interface LaunchSequenceState {
   outcome: 'success' | 'failure' | 'scrubbed' | null
   /** Set once an outcome is resolved, if the assigned astronaut was lost. */
   astronautLost: boolean
+  /** Set only during 'rollout'/'rollback' — the crawler's transit window. */
+  transitStartedOnDay: number | null
+  transitCompletesOnDay: number | null
 }
 
 export interface Headline {

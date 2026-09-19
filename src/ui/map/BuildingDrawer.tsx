@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { findBuilding, MILESTONES } from '../../content'
 import type { BuildingId } from '../../content'
+import type { GameState } from '../../simulation'
 import { AstronautRoster } from '../components/AstronautRoster'
 import { BudgetOffice } from '../components/BudgetOffice'
 import { FlaggedItems } from '../components/FlaggedItems'
@@ -58,24 +59,45 @@ export function BuildingDrawer({ buildingId, onClose, onSelectCard }: BuildingDr
   )
 }
 
+function daysLeft(state: GameState): number {
+  return Math.max(0, (state.launch?.transitCompletesOnDay ?? state.day) - state.day)
+}
+
+function vabStatus(state: GameState, missionName: string): string {
+  const stage = state.launch?.stage
+  if (stage === 'rollout') return `${missionName} is rolling out to the pad — ${daysLeft(state)}d left.`
+  if (stage === 'rollback') return `${missionName}'s vehicle is returning from the pad — back in ${daysLeft(state)}d.`
+  return `${missionName} is stacked and at the pad, in its launch sequence.`
+}
+
+function padStatus(state: GameState, missionName: string): string {
+  const stage = state.launch?.stage
+  if (stage === 'rollout') return `${missionName} is en route from the VAB — arriving in ${daysLeft(state)}d.`
+  if (stage === 'rollback') return `${missionName} scrubbed and is rolling back to the VAB — ${daysLeft(state)}d left.`
+  return `${missionName} is on the pad, in its launch sequence.`
+}
+
 function BuildingContent({ buildingId, onSelectCard }: { buildingId: BuildingId; onSelectCard: (id: string) => void }) {
   const { state } = useGame()
   const upgrades = findBuilding(buildingId).upgradeTechIds ?? []
 
   switch (buildingId) {
-    case 'launch-pad':
+    case 'launch-pad': {
+      const mission = state.launch ? MILESTONES.find((m) => m.id === state.launch?.missionId) : undefined
       return (
         <>
+          {mission && <p className="rounded border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300">{padStatus(state, mission.name)}</p>}
           <MilestoneList />
           <BuildingUpgrades techIds={upgrades} />
         </>
       )
+    }
     case 'vab': {
       const mission = state.launch ? MILESTONES.find((m) => m.id === state.launch?.missionId) : undefined
       return (
         <>
           <p className="rounded border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300">
-            {mission ? `${mission.name} is stacked and in its launch sequence.` : 'No vehicle in the launch sequence.'}
+            {mission ? vabStatus(state, mission.name) : 'No vehicle in the launch sequence.'}
           </p>
           <BuildingUpgrades techIds={upgrades} />
         </>

@@ -37,8 +37,14 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
 
 - Flowing clock (paused/normal/fast/faster), daily ticks, hard-pause only on
   a launch's go/no-go window.
-- Full launch sequence — weather check → go/no-go stations (with per-station
-  reasoning and override) → outcome — for one site (Cape Canaveral).
+- Full launch sequence — crawler rollout → weather check → go/no-go
+  stations (with per-station reasoning and override) → outcome — for one
+  site (Cape Canaveral). Rollout and rollback (after a scrub) are timed
+  crawler transit, clock running, not hard-paused; Crawler Tier II halves
+  both. The **only** hard pause is `PROCEED_TO_GO_NO_GO`, per CLAUDE.md.
+  `SCRUB_LAUNCH` no longer clears the launch outright — it sends the
+  vehicle into rollback, and the launch only clears once the crawler is
+  back at the VAB, free to try again.
 - Milestone chain: 5 Horizon missions, prerequisite- and tech-gated.
 - Decision cards: 28-card pool, `severity: flag|pause`, a `department` tag
   (5 desks), optional deadline with auto-resolve-on-expiry.
@@ -87,7 +93,11 @@ UI in `src/ui/components`, wired together in `src/App.tsx`:
   several rounds of user feedback (proportions/shadow/overlap, a fully
   linear layout, buildings sitting too close together) before landing
   here — worth knowing if either needs further real-world-reference passes
-  (actual Cape Canaveral geometry).
+  (actual Cape Canaveral geometry). The crawler itself (Stage 3) is drawn
+  on the crawlerway with its position/heading computed directly from
+  `launch.transitStartedOnDay`/`transitCompletesOnDay` each render — not a
+  separate timed animation — so it's always exactly where the sim says it
+  is; a CSS transition just smooths the jump between ticks.
 - Site Tours: Public + VIP, cooldowns, mishap chance, VIP bonus-budget
   chance.
 - Materials split into 5 typed resources (Parts, Fuel, Payload, Safety Gear,
@@ -112,20 +122,17 @@ detail):
 - Cloud sync for saves.
 - Rival program(s), contractors with loyalty, administrations, alt-history
   forks, partnership missions (Phase 3).
-- Map stages still ahead (agreed sequence): (3) crawler rollout/rollback as
-  a real sim mechanic — a `rollout` stage before the weather check with the
-  clock running, `rollback` after a scrub, Crawler Tier II shortening both,
-  the crawler physically moving VAB → pad along the existing crawlerway
-  road and back; (4) on-pad repair as a risky alternative to rollback;
-  later, launch plume/mishap/event animations and recovery ops. Stage (2)
-  building life is done — see Implementation Status above (road network,
-  ambient traffic, dish sweep, factory smoke).
+- Map stages still ahead (agreed sequence): (4) on-pad repair — a risky
+  alternative to rollback when a go/no-go station is no-go (saves the
+  round-trip time, real mishap chance); later, launch plume/mishap/event
+  animations and recovery ops. Stages (2) building life and (3) crawler
+  rollout/rollback are done — see Implementation Status above.
 - A message-center / command-center alternate view of the alert queue.
 - The full fueling-window hold-clock tension in the launch sequence — still
   simplified to weather check → go/no-go → outcome, not the staged 6-step
   sequence with a countdown-style fueling window described below.
 
-As of the last update here: 75 tests passing, `npm run build` /
+As of the last update here: 80 tests passing, `npm run build` /
 `npm run lint` / `npx cap sync ios` all clean, history fully pushed to
 `origin/main`.
 

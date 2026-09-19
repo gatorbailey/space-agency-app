@@ -43,6 +43,17 @@ const FAB_ROBOTICS_FUEL_BONUS = 1
 /** The Assembly Line makes every later construction project finish faster. */
 const ASSEMBLY_LINE_CONSTRUCTION_MULTIPLIER = 0.75
 
+/** Sim-days the crawler spends on the crawlerway each way; Crawler Tier II halves it. */
+const CRAWLER_BASE_TRANSIT_DAYS = 4
+const CRAWLER_TIER_TRANSIT_MULTIPLIER = 0.5
+
+function crawlerTransitDays(unlockedTech: string[]): number {
+  const days = hasTech(unlockedTech, TECH_IDS.crawlerTier)
+    ? CRAWLER_BASE_TRANSIT_DAYS * CRAWLER_TIER_TRANSIT_MULTIPLIER
+    : CRAWLER_BASE_TRANSIT_DAYS
+  return Math.max(1, Math.round(days))
+}
+
 /** Life Support halves the crew-readiness cost of a failed mission. */
 function softenFailureEffects(effects: ResourceDelta, unlockedTech: string[]): ResourceDelta {
   if (!hasTech(unlockedTech, TECH_IDS.lifeSupport) || effects.crewReadiness === undefined) return effects
@@ -218,6 +229,21 @@ export function gameReducer(
         else activeConstruction = null
       }
 
+      // Crawler transit: rollout carries the vehicle to the pad before the
+      // weather check; rollback (after a scrub) carries it back to the VAB
+      // and closes the launch out, free to try again. Neither is hard-paused
+      // — only PROCEED_TO_GO_NO_GO stops the clock.
+      let launch = state.launch
+      if (launch?.stage === 'rollout' && launch.transitCompletesOnDay !== null && day >= launch.transitCompletesOnDay) {
+        launch = { ...launch, stage: 'weather', transitStartedOnDay: null, transitCompletesOnDay: null }
+      } else if (
+        launch?.stage === 'rollback' &&
+        launch.transitCompletesOnDay !== null &&
+        day >= launch.transitCompletesOnDay
+      ) {
+        launch = null
+      }
+
       return {
         ...state,
         day,
@@ -231,6 +257,7 @@ export function gameReducer(
         activeResearch,
         activeConstruction,
         unlockedTech,
+        launch,
         lastExpiredCard,
         lastBudgetCycleDay,
         lastAppropriation,
@@ -339,19 +366,22 @@ export function gameReducer(
       if (mission.requiredTechId && !state.unlockedTech.includes(mission.requiredTechId)) return state
       const astronaut = findAstronaut(state.roster, action.astronautId)
       if (!astronaut || astronaut.status !== 'active') return state
+      const transitDays = crawlerTransitDays(state.unlockedTech)
       return {
         ...state,
-        isHardPaused: true,
-        speed: 'paused',
+        // Rollout isn't the hard pause — the crawler moves while the clock
+        // keeps running; per CLAUDE.md only go/no-go stops time outright.
         launch: {
           missionId: mission.id,
           plan: mission.plan,
           astronautId: astronaut.id,
-          stage: 'weather',
+          stage: 'rollout',
           weather: null,
           stations: [],
           outcome: null,
           astronautLost: false,
+          transitStartedOnDay: state.day,
+          transitCompletesOnDay: state.day + transitDays,
         },
       }
     }
@@ -363,8 +393,20 @@ export function gameReducer(
     }
 
     case 'SCRUB_LAUNCH': {
-      if (!state.launch) return state
-      return { ...state, isHardPaused: false, launch: null }
+      // Only a vehicle already at the pad can scrub; rollout/rollback are
+      // transit, not a decision point.
+      if (!state.launch || (state.launch.stage !== 'weather' && state.launch.stage !== 'go-no-go')) return state
+      const transitDays = crawlerTransitDays(state.unlockedTech)
+      return {
+        ...state,
+        isHardPaused: false,
+        launch: {
+          ...state.launch,
+          stage: 'rollback',
+          transitStartedOnDay: state.day,
+          transitCompletesOnDay: state.day + transitDays,
+        },
+      }
     }
 
     case 'PROCEED_TO_GO_NO_GO': {
@@ -376,7 +418,9 @@ export function gameReducer(
       const stations = content.stations.map((def) =>
         evaluateStation(def, state, launch.plan, weather, rng, astronaut, state.unlockedTech),
       )
-      return { ...state, launch: { ...launch, stage: 'go-no-go', stations } }
+      // The one hard pause, per CLAUDE.md: "a scheduled launch reaching its
+      // go/no-go window ... time pressure must be real."
+      return { ...state, isHardPaused: true, speed: 'paused', launch: { ...launch, stage: 'go-no-go', stations } }
     }
 
     case 'OVERRIDE_STATION': {

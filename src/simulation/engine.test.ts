@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, gameReducer } from './engine'
 import { TECH_IDS } from './tech'
-import type { AstronautDef, DecisionCardDef, GameContent, TourDef } from './types'
+import type { AstronautDef, DecisionCardDef, GameContent, GameState, Rng, TourDef } from './types'
 
 const neutralSkills = { piloting: 50, engineering: 50, eva: 50, science: 50, command: 50, public: 50 }
 
@@ -123,6 +123,15 @@ function makeContent(overrides: Partial<GameContent> = {}): GameContent {
 
 const alwaysGo: () => number = () => 0.99 // never below any no-go/failure threshold
 const alwaysFail: () => number = () => 0.001 // always below thresholds -> no-go / failure
+
+/** Advances the clock until a just-started launch's crawler rollout finishes and the weather stage begins. */
+function completeRollout(state: GameState, content: GameContent, rng: Rng): GameState {
+  let s = gameReducer(state, { type: 'SET_SPEED', speed: 'normal' }, content, rng)
+  for (let i = 0; i < 15 && s.launch?.stage === 'rollout'; i++) {
+    s = gameReducer(s, { type: 'TICK' }, content, rng)
+  }
+  return s
+}
 
 describe('clock', () => {
   it('does not advance while paused', () => {
@@ -391,19 +400,40 @@ describe('decision cards', () => {
 })
 
 describe('launch sequence', () => {
-  it('runs weather -> go-no-go -> outcome and hard-pauses the clock throughout', () => {
+  it('starts in rollout with the clock still running, not hard-paused', () => {
     const content = makeContent()
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
-    expect(state.isHardPaused).toBe(true)
+    expect(state.launch?.stage).toBe('rollout')
+    expect(state.isHardPaused).toBe(false)
+    expect(state.launch?.transitStartedOnDay).toBe(0)
+    expect(state.launch?.transitCompletesOnDay).toBeGreaterThan(0)
+  })
+
+  it('rollout completes into the weather stage once the crawler reaches the pad', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
     expect(state.launch?.stage).toBe('weather')
+    expect(state.launch?.transitCompletesOnDay).toBeNull()
+    expect(state.isHardPaused).toBe(false) // still not hard-paused — that's PROCEED_TO_GO_NO_GO's job
+  })
+
+  it('runs weather -> go-no-go -> outcome, hard-pausing only once go/no-go begins', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
 
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     expect(state.launch?.weather).not.toBeNull()
+    expect(state.isHardPaused).toBe(false)
 
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     expect(state.launch?.stage).toBe('go-no-go')
     expect(state.launch?.stations.every((s) => s.isGo)).toBe(true)
+    expect(state.isHardPaused).toBe(true)
 
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
     expect(state.launch?.stage).toBe('outcome')
@@ -421,6 +451,7 @@ describe('launch sequence', () => {
     const content = makeContent()
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+    state = completeRollout(state, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
     expect(state.launch?.stations.some((s) => !s.isGo)).toBe(true)
@@ -435,6 +466,7 @@ describe('launch sequence', () => {
     const content = makeContent()
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysFail)
+    state = completeRollout(state, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
 
@@ -448,15 +480,56 @@ describe('launch sequence', () => {
     expect(state.launch?.stage).toBe('outcome')
   })
 
-  it('SCRUB_LAUNCH clears the launch and releases the hard pause at zero resource cost', () => {
+  it('SCRUB_LAUNCH sends the launch to rollback instead of clearing it outright, at zero resource cost', () => {
     const content = makeContent()
     let state = createInitialState(content)
     const startingResources = state.resources
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'SCRUB_LAUNCH' }, content, alwaysGo)
-    expect(state.launch).toBeNull()
+    expect(state.launch?.stage).toBe('rollback')
     expect(state.isHardPaused).toBe(false)
     expect(state.resources).toEqual(startingResources)
+  })
+
+  it('rollback clears the launch once the crawler is back at the VAB, ready to try again', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
+    state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
+    state = gameReducer(state, { type: 'SCRUB_LAUNCH' }, content, alwaysGo)
+    for (let i = 0; i < 15 && state.launch; i++) {
+      state = gameReducer(state, { type: 'TICK' }, content, alwaysGo)
+    }
+    expect(state.launch).toBeNull()
+
+    // A fresh attempt is free to start again immediately.
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    expect(state.launch?.stage).toBe('rollout')
+  })
+
+  it('SCRUB_LAUNCH is a no-op during rollout or rollback — only weather/go-no-go can scrub', () => {
+    const content = makeContent()
+    let state = createInitialState(content)
+    state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    expect(state.launch?.stage).toBe('rollout')
+    const next = gameReducer(state, { type: 'SCRUB_LAUNCH' }, content, alwaysGo)
+    expect(next).toBe(state)
+  })
+
+  it('Crawler Tier II shortens both rollout and rollback', () => {
+    const content = makeContent()
+    let withoutTier = createInitialState(content)
+    withoutTier = gameReducer(withoutTier, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    const baseDays = withoutTier.launch!.transitCompletesOnDay!
+
+    let withTier: GameState = { ...createInitialState(content), unlockedTech: [TECH_IDS.crawlerTier] }
+    withTier = gameReducer(withTier, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    const tierDays = withTier.launch!.transitCompletesOnDay!
+
+    expect(tierDays).toBeLessThan(baseDays)
   })
 })
 
@@ -477,6 +550,7 @@ describe('launch cost', () => {
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
@@ -511,6 +585,7 @@ describe('launch cost', () => {
     })
     let state = createInitialState(content)
     state = gameReducer(state, { type: 'START_LAUNCH', missionId: 'test-milestone', astronautId: 'test-astronaut' }, content, alwaysGo)
+    state = completeRollout(state, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
 
@@ -572,6 +647,7 @@ describe('astronaut roster', () => {
       content,
       alwaysFail,
     )
+    state = completeRollout(state, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
     for (const station of state.launch!.stations) {
@@ -595,6 +671,7 @@ describe('astronaut roster', () => {
       content,
       alwaysGo,
     )
+    state = completeRollout(state, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
@@ -651,6 +728,7 @@ describe('milestone chain', () => {
       content,
       alwaysGo,
     )
+    state = completeRollout(state, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
@@ -675,6 +753,7 @@ describe('milestone chain', () => {
       content,
       alwaysGo,
     )
+    state = completeRollout(state, content, alwaysGo)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysGo)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysGo)
     state = gameReducer(state, { type: 'COMMIT_LAUNCH' }, content, alwaysGo)
@@ -838,6 +917,7 @@ describe('tech tree', () => {
       content,
       alwaysFail,
     )
+    state = completeRollout(state, content, alwaysFail)
     state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, alwaysFail)
     state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, alwaysFail)
     for (const station of state.launch!.stations) {
@@ -875,6 +955,7 @@ describe('tech tree', () => {
         content,
         rng,
       )
+      state = completeRollout(state, content, rng)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
       state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
       for (const station of state.launch!.stations) {
@@ -902,6 +983,7 @@ describe('tech tree', () => {
         content,
         rngHigh,
       )
+      state = completeRollout(state, content, rngHigh)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rngHigh)
       return state.launch?.weather?.temperatureF ?? 0
     }
@@ -1068,6 +1150,7 @@ describe('infrastructure tech tree', () => {
         content,
         rng,
       )
+      state = completeRollout(state, content, rng)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
       state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
       return state.launch?.stations.find((s) => s.stationId === 'propulsion')?.isGo
@@ -1092,6 +1175,7 @@ describe('infrastructure tech tree', () => {
         content,
         rng,
       )
+      state = completeRollout(state, content, rng)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
       state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
       return state.launch?.stations.find((s) => s.stationId === 'range-safety')?.isGo
@@ -1116,6 +1200,7 @@ describe('infrastructure tech tree', () => {
         content,
         rng,
       )
+      state = completeRollout(state, content, rng)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
       return state.launch?.weather
     }
@@ -1144,6 +1229,7 @@ describe('infrastructure tech tree', () => {
         content,
         rng,
       )
+      state = completeRollout(state, content, rng)
       state = gameReducer(state, { type: 'RUN_WEATHER_CHECK' }, content, rng)
       state = gameReducer(state, { type: 'PROCEED_TO_GO_NO_GO' }, content, rng)
       return state.launch?.stations.find((s) => s.stationId === 'flight-surgeon')?.isGo
